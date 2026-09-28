@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Как работает mini_rag.py — визуально</title>
+<style>
+  :root{
+    --bg:#0a0e13; --panel:#111823; --panel-2:#0e141d; --line:#1e2a3a;
+    --ink:#e6edf6; --dim:#8b9bb0; --dimmer:#5d6d82;
+    --accent:#22d3ee; --good:#34d399; --bad:#fb7185; --warn:#fbbf24;
+    --mono:ui-monospace,"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(900px 500px at 15% -10%, #16324a55, transparent 60%),
+                     radial-gradient(700px 400px at 90% 0%, #2a1b3d55, transparent 55%);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+
+  /* ── шапка ── */
+  header{padding:56px 0 28px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+  h1{margin:0 0 14px;font-size:clamp(28px,4.6vw,44px);line-height:1.12;letter-spacing:-.022em;font-weight:680}
+  h1 .thin{color:var(--dim);font-weight:400}
+  .lede{margin:0;max-width:70ch;color:var(--dim);font-size:16.5px}
+  .lede code{font-family:var(--mono);font-size:.9em;color:var(--accent);background:#22d3ee14;padding:2px 6px;border-radius:5px}
+  .truth{display:inline-flex;align-items:center;gap:9px;margin-top:22px;padding:9px 14px;
+    border:1px solid #34d39940;background:#34d3990f;border-radius:9px;font-size:13.5px;color:#a7f3d0}
+  .truth b{color:var(--good)}
+
+  /* ── навигация ── */
+  nav{position:sticky;top:0;z-index:50;background:#0a0e13e8;backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--line);margin-bottom:8px}
+  nav .wrap{display:flex;gap:4px;overflow-x:auto;padding:9px 24px}
+  nav a{font-family:var(--mono);font-size:12px;color:var(--dim);text-decoration:none;
+    padding:6px 11px;border-radius:7px;white-space:nowrap;transition:.15s}
+  nav a:hover{color:var(--ink);background:#ffffff0d}
+  nav a.on{color:var(--accent);background:#22d3ee14}
+
+  /* ── секции ── */
+  section{padding:52px 0;border-bottom:1px solid #131c27}
+  .step{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+  .step .num{font-family:var(--mono);font-size:12px;color:var(--accent);border:1px solid #22d3ee44;
+    padding:2px 8px;border-radius:6px;background:#22d3ee0d}
+  h2{margin:0;font-size:24px;letter-spacing:-.015em;font-weight:640}
+  .fn{font-family:var(--mono);font-size:12.5px;color:var(--dim);background:var(--panel-2);
+    border:1px solid var(--line);padding:3px 9px;border-radius:6px}
+  .sub{color:var(--dim);max-width:76ch;margin:12px 0 26px}
+  .sub strong{color:var(--ink);font-weight:600}
+
+  /* ── карточки ── */
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h3{margin:0 0 6px;font-size:14.5px;font-weight:620}
+  .card .meta{font-family:var(--mono);font-size:11.5px;color:var(--dimmer)}
+
+  /* ── пайплайн ── */
+  .flow{display:flex;gap:8px;overflow-x:auto;padding:6px 0 14px}
+  .stage{flex:1 0 132px;background:var(--panel);border:1px solid var(--line);border-radius:11px;
+    padding:13px 12px;cursor:pointer;transition:.18s;position:relative;text-decoration:none;color:inherit;display:block}
+  .stage:hover{border-color:#22d3ee66;transform:translateY(-2px)}
+  .stage .sn{font-family:var(--mono);font-size:11px;color:var(--accent)}
+  .stage .st{font-size:13.5px;font-weight:600;margin:5px 0 3px}
+  .stage .sf{font-family:var(--mono);font-size:10.5px;color:var(--dimmer);word-break:break-all}
+  .stage::after{content:"→";position:absolute;right:-11px;top:50%;transform:translateY(-50%);
+    color:#2c3b4d;font-size:14px}
+  .stage:last-child::after{display:none}
+  .phaselabel{font-family:var(--mono);font-size:11.5px;color:var(--dimmer);margin:2px 0 10px;
+    text-transform:uppercase;letter-spacing:.1em}
+
+  /* ── чанкинг ── */
+  .ctrl{display:flex;flex-wrap:wrap;gap:20px;align-items:center;background:var(--panel-2);
+    border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-bottom:18px}
+  .ctrl label{font-family:var(--mono);font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:10px}
+  input[type=range]{accent-color:var(--accent);width:170px}
+  .val{color:var(--accent);font-family:var(--mono);min-width:42px;display:inline-block}
+  select{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-family:var(--mono);font-size:12.5px}
+  .chunkbox{max-height:460px;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:6px}
+  .chunk{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--c,var(--accent));
+    border-radius:9px;padding:12px 14px}
+  .chunk .ch-h{font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-bottom:7px;
+    display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .chunk .ch-h .tag{color:var(--c,var(--accent))}
+  .chunk .ch-t{font-size:13.5px;white-space:pre-wrap;color:#c8d4e3}
+  mark{background:#fbbf2433;color:#fde68a;border-radius:3px;padding:0 2px;box-shadow:inset 0 0 0 1px #fbbf2440}
+  .overlapnote{font-size:13px;color:var(--dim);margin-top:12px}
+  .overlapnote b{color:var(--warn)}
+
+  /* ── вектор ── */
+  .vecstrip{display:flex;gap:2px;margin:10px 0 6px;flex-wrap:wrap}
+  .vc{width:15px;height:26px;border-radius:3px;cursor:help}
+  .veclabel{font-family:var(--mono);font-size:11px;color:var(--dimmer)}
+  .mapwrap{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:10px;position:relative}
+  svg{display:block;width:100%;height:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px}
+  .lg{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);cursor:pointer;font-family:var(--mono)}
+  .lg .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+  .lg.off{opacity:.32}
+
+  /* ── поиск ── */
+  .qbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+  .qbtn{background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:9px;
+    padding:9px 13px;font-size:13px;cursor:pointer;transition:.15s;font-family:inherit;text-align:left}
+  .qbtn:hover{color:var(--ink);border-color:#22d3ee55}
+  .qbtn.on{background:#22d3ee14;border-color:var(--accent);color:var(--ink)}
+  .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:3px;gap:3px}
+  .seg button{background:none;border:0;color:var(--dim);font-family:var(--mono);font-size:12.5px;
+    padding:7px 13px;border-radius:7px;cursor:pointer;transition:.15s}
+  .seg button.on{background:var(--accent);color:#04222a;font-weight:600}
+  .verdict{border-radius:11px;padding:14px 16px;margin:16px 0;font-size:14px;border:1px solid}
+  .verdict.ok{background:#34d3990f;border-color:#34d39944;color:#a7f3d0}
+  .verdict.err{background:#fb71850f;border-color:#fb718544;color:#fecdd3}
+  .verdict b{font-family:var(--mono)}
+  .rank{display:flex;flex-direction:column;gap:7px}
+  .row{display:grid;grid-template-columns:30px 1fr;gap:11px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 12px;transition:.15s}
+  .row.hit{border-color:#34d39966;background:#34d3990d}
+  .row.miss{border-color:#fb718533}
+  .row .rk{font-family:var(--mono);font-size:12px;color:var(--dimmer);text-align:right}
+  .row .rh{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+  .row .rt{font-size:13px;color:#c8d4e3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62ch}
+  .row .rs{font-family:var(--mono);font-size:12px;color:var(--accent)}
+  .row.hit .rs{color:var(--good)}
+  .bar{height:5px;background:#1a2534;border-radius:3px;margin-top:7px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#0e7490,#22d3ee)}
+  .row.hit .bar i{background:linear-gradient(90deg,#047857,#34d399)}
+  .row .src{font-family:var(--mono);font-size:11px;color:var(--dimmer)}
+  .correctfound{font-family:var(--mono);font-size:12.5px;color:var(--warn);margin-top:10px}
+
+  /* ── промпт / ответы ── */
+  pre{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:16px;
+    overflow:auto;font-family:var(--mono);font-size:12.5px;line-height:1.62;color:#c8d4e3;margin:0;max-height:520px}
+  pre .c1{color:var(--accent)} pre .c2{color:var(--good)}
+  .ans{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .ans h3{margin:0 0 10px;font-size:13px;font-family:var(--mono);font-weight:600}
+  .ans.no h3{color:var(--bad)} .ans.yes h3{color:var(--good)}
+  .ans p{margin:0;font-size:14px;color:#d3dded;white-space:pre-wrap}
+  .cite{color:var(--good);font-family:var(--mono);font-size:12px}
+
+  /* ── таблица ── */
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line)}
+  th{font-family:var(--mono);font-size:11.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;font-weight:500}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .win{color:var(--good);font-weight:600}
+  .lose{color:var(--bad)}
+  .misslist{margin:10px 0 0;padding-left:20px;color:var(--dim);font-size:13.5px}
+  .misslist li{margin:4px 0}
+
+  .callout{background:linear-gradient(180deg,#132033,#111823);border:1px solid #22d3ee33;
+    border-radius:12px;padding:18px 20px;margin:22px 0}
+  .callout h3{margin:0 0 8px;font-size:15px;color:var(--accent)}
+  .callout p{margin:0 0 8px;color:var(--dim);font-size:14px}
+  .callout p:last-child{margin-bottom:0}
+  kbd{font-family:var(--mono);font-size:11.5px;background:var(--panel);border:1px solid var(--line);
+    border-bottom-width:2px;border-radius:5px;padding:2px 6px;color:var(--ink)}
+  footer{padding:40px 0 64px;color:var(--dimmer);font-size:13px}
+  footer code{font-family:var(--mono);color:var(--dim)}
+  @media(max-width:640px){ .row .rt{max-width:34ch} section{padding:38px 0} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="kicker">RAG Lab · разбор пайплайна</p>
+    <h1>Как работает <span class="thin">mini_rag.py</span></h1>
+    <p class="lede">
+      Один вопрос проходит семь этапов: <code>load</code> → <code>chunk</code> → <code>embed</code> →
+      <code>search</code> → <code>prompt</code> → <code>generate</code> → <code>evaluate</code>.
+      Ниже — каждый этап на настоящих данных этого проекта.
+    </p>
+    <div class="truth">
+      <span>●</span>
+      <span>Все числа, векторы и ответы на странице <b>настоящие</b> — их сгенерировал <code>build_viz.py</code>
+      из реального корпуса и локальных моделей. Ничего не нарисовано «для красоты».</span>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <div class="wrap">
+    <a href="#pipeline">Обзор</a>
+    <a href="#corpus">01 Корпус</a>
+    <a href="#chunking">02 Чанкинг</a>
+    <a href="#embedding">03 Эмбеддинги</a>
+    <a href="#search">04 Поиск</a>
+    <a href="#prompt">05 Промпт</a>
+    <a href="#answer">06 Ответ</a>
+    <a href="#eval">07 Оценка</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- ══════════ ОБЗОР ══════════ -->
+  <section id="pipeline">
+    <div class="step"><span class="num">обзор</span><h2>Две фазы, семь шагов</h2></div>
+    <p class="sub">
+      RAG — это <strong>поисковик, подключённый к языковой модели</strong>. Сначала мы один раз
+      готовим базу знаний, потом на каждый вопрос быстро находим в ней нужные куски и
+      отдаём их модели вместе с вопросом. Модель отвечает, опираясь на текст, а не на память.
+    </p>
+
+    <p class="phaselabel">Фаза A — индексация · выполняется один раз</p>
+    <div class="flow">
+      <a class="stage" href="#corpus"><div class="sn">01</div><div class="st">Загрузка</div><div class="sf">load_documents()</div></a>
+      <a class="stage" href="#chunking"><div class="sn">02</div><div class="st">Чанкинг</div><div class="sf">split_into_chunks()</div></a>
+      <a class="stage" href="#embedding"><div class="sn">03</div><div class="st">Эмбеддинги</div><div class="sf">embed()</div></a>
+      <a class="stage" href="#search"><div class="sn">04</div><div class="st">Индекс</div><div class="sf">RagIndex</div></a>
+    </div>
+
+    <p class="phaselabel" style="margin-top:18px">Фаза B — запрос · выполняется на каждый вопрос</p>
+    <div class="flow">
+      <a class="stage" href="#search"><div class="sn">05</div><div class="st">Поиск top-k</div><div class="sf">RagIndex.search()</div></a>
+      <a class="stage" href="#prompt"><div class="sn">06</div><div class="st">Сборка промпта</div><div class="sf">build_prompt()</div></a>
+      <a class="stage" href="#answer"><div class="sn">07</div><div class="st">Генерация</div><div class="sf">chat()</div></a>
+    </div>
+
+    <div class="grid g3" style="margin-top:26px">
+      <div class="card"><h3>Корпус</h3><div class="meta" id="m-docs">—</div></div>
+      <div class="card"><h3>Чанков в индексе</h3><div class="meta" id="m-chunks">—</div></div>
+      <div class="card"><h3>Размерность вектора</h3><div class="meta" id="m-dim">—</div></div>
+      <div class="card"><h3>Размер чанка</h3><div class="meta" id="m-cs">—</div></div>
+      <div class="card"><h3>Глубина поиска k</h3><div class="meta" id="m-k">—</div></div>
+      <div class="card"><h3>Генератор</h3><div class="meta" id="m-llm">—</div></div>
+    </div>
+  </section>
+
+  <!-- ══════════ 01 КОРПУС ══════════ -->
+  <section id="corpus">
+    <div class="step"><span class="num">01</span><h2>Корпус: что вообще индексируем</h2>
+      <code class="fn">load_documents()</code></div>
+    <p class="sub">
+      RAG начинается с документов. Здесь это 6 markdown-файлов вымышленной компании
+      <strong>«Вектор»</strong>. Корпус специально выдуманный: локальная модель не знает этих
+      фактов, поэтому любую галлюцинацию видно сразу. Нажмите на документ, чтобы открыть текст.
+    </p>
+    <div class="grid g3" id="doclist"></div>
+    <div id="docview" style="margin-top:18px"></div>
+  </section>
+
+  <!-- ══════════ 02 ЧАНКИНГ ══════════ -->
+  <section id="chunking">
+    <div class="step"><span class="num">02</span><h2>Чанкинг: режем на куски</h2>
+      <code class="fn">split_into_chunks()</code></div>
+    <p class="sub">
+      Целый документ искать бессмысленно: у эмбеддера есть лимит, а вектор длинного текста
+      «размывается» — усредняет сразу несколько тем. Режем по разделам <code class="fn">##</code>,
+      затем пакуем абзацы в куски до <strong>CHUNK_SIZE</strong> символов с перекрытием
+      <strong>CHUNK_OVERLAP</strong>.
+      <br><br>
+      Покрутите ползунки — нарезка пересчитывается прямо в браузере тем же алгоритмом, что и в
+      <code class="fn">mini_rag.py</code>. <span style="color:var(--warn)">Жёлтым</span> подсвечено
+      перекрытие: текст, который попадает сразу в два чанка, чтобы мысль не рвалась на границе.
+    </p>
+
+    <div class="ctrl">
+      <label>CHUNK_SIZE <input type="range" id="csize" min="200" max="1600" step="50"> <span class="val" id="csizev"></span></label>
+      <label>CHUNK_OVERLAP <input type="range" id="covl" min="0" max="500" step="25"> <span class="val" id="covlv"></span></label>
+      <label>Документ <select id="cdoc"></select></label>
+      <span class="val" id="cstat" style="color:var(--dim)"></span>
+    </div>
+    <div class="chunkbox" id="chunks"></div>
+    <p class="overlapnote" id="ovnote"></p>
+  </section>
+
+  <!-- ══════════ 03 ЭМБЕДДИНГИ ══════════ -->
+  <section id="embedding">
+    <div class="step"><span class="num">03</span><h2>Эмбеддинги: текст становится вектором</h2>
+      <code class="fn">embed()</code></div>
+    <p class="sub">
+      Модель превращает каждый чанк в вектор из <strong id="dimtext">1024</strong> чисел.
+      Она обучена так, что <strong>близкие по смыслу тексты дают близкие векторы</strong> —
+      поэтому поиск работает по смыслу, а не по совпадению слов. Вот как выглядит настоящий
+      вектор (первые 40 измерений):
+    </p>
+    <div class="card">
+      <h3 id="vechead">—</h3>
+      <div class="vecstrip" id="vecstrip"></div>
+      <div class="veclabel">цвет: <span style="color:#22d3ee">■</span> положительные значения ·
+        <span style="color:#f472b6">■</span> отрицательные · насыщенность = величина</div>
+    </div>
+
+    <h3 style="margin:30px 0 8px;font-size:16px">Карта векторного пространства</h3>
+    <p class="sub" style="margin-bottom:14px">
+      Все <span id="mapcount">37</span> чанков, спроецированные из 1024 измерений в 2D методом
+      главных компонент. Цвет — исходный документ. Это <em>иллюстрация</em>: в 2D сжимается лишь
+      <b id="pcaexp">—</b> дисперсии, поэтому близости на глаз обманчивы — настоящий поиск идёт
+      в полной размерности. Кластеры всё равно видны: чанки одного документа обычно лежат рядом.
+    </p>
+    <div class="mapwrap"><svg id="map" viewBox="0 0 800 460" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <!-- ══════════ 04 ПОИСК ══════════ -->
+  <section id="search">
+    <div class="step"><span class="num">04</span><h2>Поиск: косинусная близость</h2>
+      <code class="fn">RagIndex.search()</code></div>
+    <p class="sub">
+      Вопрос кодируется <strong>той же</strong> моделью, что и чанки. Дальше — вектор вопроса
+      умножается на матрицу всех векторов, и мы получаем <strong>косинус</strong> между вопросом
+      и каждым чанком. Чем ближе к 1, тем семантически ближе. Берём top-k.
+      <br><br>
+      Векторы нормализованы к единичной длине, поэтому косинус — это обычное скалярное
+      произведение, и весь поиск в коде занимает одну строку:
+      <code class="fn">self.vectors @ query_vec</code>.
+    </p>
+
+    <div class="qbar" id="qbar"></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:18px">
+      <span class="phaselabel" style="margin:0">модель эмбеддингов</span>
+      <div class="seg" id="modelseg"></div>
+      <label style="font-family:var(--mono);font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:9px">
+        k <input type="range" id="kslider" min="1" max="10" step="1"> <span class="val" id="kv"></span>
+      </label>
+    </div>
+
+    <div class="verdict" id="verdict"></div>
+    <div class="rank" id="rank"></div>
+    <p class="correctfound" id="outside"></p>
+
+    <div class="callout">
+      <h3>Главная находка этого проекта</h3>
+      <p>
+        Переключите модель на <kbd>nomic-embed-text</kbd> и посмотрите на тот же список.
+        Правильный чанк проваливается вниз, а разрыв между top-1 и top-2 сжимается до
+        <b>0.003</b> — это шум, модель почти не различает релевантное и нерелевантное.
+      </p>
+      <p>
+        Чанкинг при этом ни при чём: с чистым текстом без markdown становилось только хуже.
+        Виновата была англоцентричная модель на русских данных. Смена на мультиязычную
+        <b>bge-m3</b> подняла Recall@5 с 71% до 100% без единой другой правки.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════ 05 ПРОМПТ ══════════ -->
+  <section id="prompt">
+    <div class="step"><span class="num">05</span><h2>Сборка промпта</h2>
+      <code class="fn">build_prompt()</code></div>
+    <p class="sub">
+      Найденные чанки нумеруются и подставляются в промпт — это и есть «дополнение поиском»
+      (retrieval-augmented). Нумерация нужна, чтобы модель могла ссылаться на источник:
+      <code class="fn">[1]</code>, <code class="fn">[2]</code>. Вот настоящий промпт для
+      выбранного вопроса при <span id="pk">k=4</span> и модели <b>bge-m3</b>:
+    </p>
+    <pre id="promptbox"></pre>
+    <p class="overlapnote">
+      Обратите внимание на системную инструкцию: она требует отвечать <b>только</b> по
+      фрагментам и <b>явно разрешает отказаться</b> («в документах нет ответа»). Право
+      отказаться — самый дешёвый способ снизить галлюцинации.
+    </p>
+  </section>
+
+  <!-- ══════════ 06 ОТВЕТ ══════════ -->
+  <section id="answer">
+    <div class="step"><span class="num">06</span><h2>Ответ: с RAG и без</h2>
+      <code class="fn">chat()</code></div>
+    <p class="sub">
+      Один и тот же вопрос, одна и та же модель <code class="fn" id="llmname">qwen2.5:7b-instruct</code>.
+      Разница только в том, дали ли ей найденный контекст.
+    </p>
+    <div class="grid g2">
+      <div class="ans no">
+        <h3>✗ БЕЗ RAG — только знания в весах</h3>
+        <p id="ansno"></p>
+      </div>
+      <div class="ans yes">
+        <h3>✓ С RAG — по найденным фрагментам (k=4)</h3>
+        <p id="ansyes"></p>
+      </div>
+    </div>
+    <p class="overlapnote" id="ansnote"></p>
+  </section>
+
+  <!-- ══════════ 07 ОЦЕНКА ══════════ -->
+  <section id="eval">
+    <div class="step"><span class="num">07</span><h2>Оценка: как не обмануть себя</h2>
+      <code class="fn">eval_retrieval.py</code></div>
+    <p class="sub">
+      Ответы могут выглядеть правдоподобно и при этом быть неверными. Единственный способ
+      отличить улучшение от самообмана — <strong>золотой набор</strong>: вопросы, для которых
+      мы заранее знаем, какой фрагмент обязан быть найден. Здесь таких вопросов
+      <b id="evaltotal">14</b>.
+    </p>
+
+    <div class="grid g2" style="margin-bottom:20px">
+      <div class="card">
+        <h3>Recall@<span class="ek">5</span> — главная метрика</h3>
+        <div class="meta" style="margin-top:8px">
+          Доля вопросов, где правильный чанк попал в top-k. Если Recall@5 = 71%, то почти на
+          каждом третьем вопросе модель <b style="color:var(--ink)">физически не может</b>
+          ответить правильно — контекст ей просто не дали. Никакой промпт это не исправит.
+        </div>
+      </div>
+      <div class="card">
+        <h3>MRR — насколько высоко в выдаче</h3>
+        <div class="meta" style="margin-top:8px">
+          Среднее <code>1/место</code> первого правильного чанка. 1.0 означает, что правильный
+          фрагмент всегда оказывается первым. 0.5 — что в среднем он где-то на втором месте.
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <table id="evaltable"></table>
+    </div>
+
+    <div class="grid g2" style="margin-top:20px" id="missboxes"></div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  Сгенерировано <code>build_viz.py</code> из реального пайплайна <code>mini_rag.py</code>.
+  Локальный стек: <code>bge-m3</code> (эмбеддинги) + <code>qwen2.5:7b-instruct</code> (генерация) через Ollama.
+  Страница автономна — без интернета, серверов и внешних зависимостей.
+</footer>
+
+<script>
+const DATA = {"meta":{"chunk_size":700,"chunk_overlap":150,"top_k":4,"llm":"qwen2.5:7b-instruct","chunks_total":37,"docs_total":6,"pca_explained":0.2244},"models":{"bge-m3":{"label":"bge-m3","dim":1024,"note":"мультиязычная, обучена без инструкций"},"nomic-embed-text":{"label":"nomic-embed-text","dim":768,"note":"англоцентричная, требует префиксы"}},"documents":[{"source":"01_onboarding.md","title":"Онбординг: первый рабочий день","text":"# Онбординг: первый рабочий день\n\n## До начала работы\n\nКадровая служба отправляет оффер и ссылку на портал адаптации за 5 рабочих дней до старта.\nЛогин в корпоративных системах выдаётся в формате `ivan.petrov`, корпоративная почта —\n`ivan.petrov@vektor.example`.\n\n## Первый день\n\nВ 10:00 по московскому времени новый сотрудник встречается с наставником. Наставник\nзакрепляется за сотрудником на весь испытательный срок, который в компании составляет\n3 месяца. За каждым новым сотрудником также закрепляется «buddy» — коллега из другой\nкоманды, с которым можно обсуждать любые вопросы без формальностей.\n\nВ первый день выдаётся ноутбук MacBook Pro 14\" и пропуск в офис. Пропуск активируется\nв течение 2 часов после выдачи.\n\n## Первая неделя\n\nВ первую неделю нужно пройти обязательные курсы в учебном портале: информационная\nбезопасность, охрана труда и антикоррупционная политика. Курс по информационной\nбезопасности занимает около 90 минут и должен быть пройден до получения доступа\nк продуктивной среде.\n\n## Доступы\n\nДоступ к продуктивной среде (production) выдаётся только после испытательного срока\nи по согласованию с руководителем. Доступ к репозиториям выдаётся в первый день\nавтоматически. Доступ к базе данных клиентов требует отдельной заявки и согласования\nсо службой безопасности.\n","chars":1292},{"source":"02_vacation.md","title":"Отпуска и отсутствие на работе","text":"# Отпуска и отсутствие на работе\n\n## Ежегодный оплачиваемый отпуск\n\nБазовый ежегодный оплачиваемый отпуск в компании «Вектор» составляет 28 календарных дней.\nДополнительно сотрудникам, проработавшим более 3 лет, предоставляется ещё 4 календарных дня.\nИтого максимальная длительность — 32 календарных дня в год.\n\n## Заявление\n\nЗаявление на отпуск подаётся через HR-портал не позднее чем за 14 календарных дней\nдо начала отпуска. Руководитель обязан рассмотреть заявление в течение 3 рабочих дней.\nЕсли руководитель не ответил в этот срок, заявление считается согласованным автоматически.\n\n## Дробление отпуска\n\nОтпуск можно дробить. Одна из частей должна быть не менее 14 календарных дней.\nОстальные части — любыми отрезками от 1 дня по согласованию с руководителем.\n\n## Перенос и компенсация\n\nНеиспользованные дни отпуска переносятся на следующий год, но не более 10 дней.\nДенежная компенсация за неиспользованный отпуск возможна только при увольнении.\nПеренос более 10 дней допускается только с письменного разрешения директора\nпо персоналу.\n\n## Больничный\n\nБольничный оформляется в электронном виде. Сотрудник обязан уведомить руководителя\nв первый день отсутствия, любым удобным способом. Больничный оплачивается согласно\nзаконодательству: первые 3 дня за счёт компании, остальные — за счёт фонда.\n\n## Отгулы\n\nОтгул за работу в выходные предоставляется в двойном размере: два отгула за один\nотработанный выходной день. Отгулы нужно использовать в течение 6 месяцев.\n","chars":1469},{"source":"03_vpn_access.md","title":"Удалённый доступ и VPN","text":"# Удалённый доступ и VPN\n\n## Когда нужен VPN\n\nКорпоративный VPN обязателен для любого доступа к внутренним системам извне офиса.\nБез VPN недоступны: git-сервер, внутренние дашборды, база данных, система тикетов.\n\n## Подключение\n\nVPN работает через клиент WireGuard. Конфигурационный файл выдаёт служба поддержки\nпо заявке. Заявка рассматривается в течение 1 рабочего дня. Один сотрудник может\nполучить не более 3 устройств.\n\n## Двухфакторная аутентификация\n\n2FA обязательна для VPN, почты и git-сервера. Поддерживаются TOTP-приложения\n(Google Authenticator, Aegis, 1Password) и аппаратные ключи YubiKey.\nSMS как второй фактор не поддерживается.\n\n## Смена пароля\n\nПароль корпоративной учётной записи меняется каждые 180 дней. Пароль должен содержать\nне менее 14 символов. Повторное использование последних 10 паролей запрещено.\nПосле 5 неудачных попыток входа учётная запись блокируется на 30 минут.\n\n## Проблемы с доступом\n\nЕсли VPN не подключается, в первую очередь нужно проверить системное время на устройстве:\nрассинхронизация более 60 секунд ломает рукопожатие. Если время верное, обратитесь\nв поддержку в канале `#it-help` в корпоративном мессенджере. Срочные инциденты\nс доступом решаются дежурным инженером круглосуточно.\n","chars":1230},{"source":"04_expenses.md","title":"Командировки и возмещение расходов","text":"# Командировки и возмещение расходов\n\n## Суточные\n\nСуточные при командировке по России составляют 3000 рублей в сутки.\nПри зарубежной командировке — 80 евро в сутки. Суточные выплачиваются\nавансом вместе с командировочным авансом.\n\n## Лимиты на проживание\n\nЛимит на гостиницу в Москве и Санкт-Петербурге — 12 000 рублей в сутки.\nВ других городах России — 7 000 рублей в сутки. Превышение лимита возможно\nтолько с предварительного письменного согласования руководителя.\n\n## Такси и транспорт\n\nТакси в командировке компенсируется без ограничений при наличии чека, но только\nв поездках, связанных с рабочими задачами. Аэроэкспресс и общественный транспорт\nкомпенсируются всегда. Аренда автомобиля согласуется отдельно.\n\n## Отчётность\n\nОтчёт по командировке подаётся в течение 5 рабочих дней после возвращения.\nК отчёту прикладываются все чеки. Если чек утерян, пишется объяснительная записка.\nОбработка отчёта бухгалтерией занимает до 10 рабочих дней, выплата приходит\nв ближайшую зарплату.\n\n## Обучение и конференции\n\nОплата конференций и курсов согласуется с руководителем. Бюджет на обучение —\n60 000 рублей на сотрудника в год. Неиспользованный бюджет не переносится\nна следующий год и не обменивается на деньги.\n","chars":1214},{"source":"05_engineering.md","title":"Инженерные практики: код, ревью, деплой","text":"# Инженерные практики: код, ревью, деплой\n\n## Стек\n\nОсновной стек компании «Вектор»: Python 3.12 для бэкенда, TypeScript и React для\nфронтенда, PostgreSQL как основная база данных, Redis для кеша. Сервисы упакованы\nв Docker и запускаются в Kubernetes.\n\n## Ветки и code review\n\nИспользуется trunk-based development: основная ветка — `main`. Фича-ветки живут\nне дольше 3 дней, чтобы избежать болезненных слияний. Каждый pull request требует\nминимум одного одобрения. PR, затрагивающий более 400 строк, требует двух одобрений.\nАвтор не может одобрить собственный PR.\n\nВремя реакции на ревью — не более 4 рабочих часов в рабочее время. Если ревьюер\nне отвечает сутки, разрешается обратиться к тимлиду.\n\n## Тесты и качество\n\nПокрытие тестами нового кода должно быть не ниже 70%. Пайплайн CI прогоняет линтер,\nтипы и тесты. Красный CI блокирует слияние. Слияние в `main` возможно только\nчерез squash-коммит.\n\n## Деплой\n\nДеплой в продуктивную среду происходит по вторникам и четвергам, с 11:00 до 16:00\nпо московскому времени. В пятницу деплой запрещён. Исключение — хотфиксы, которые\nсогласует дежурный тимлид.\n\nДеплой идёт поэтапно: сначала на 5% трафика, затем на 25%, затем на 100%.\nМежду этапами выдерживается 15 минут наблюдения за метриками. Откат (rollback)\nвыполняется одной командой и занимает около 2 минут.\n\n## Дежурства\n\nДежурство длится одну неделю и начинается в понедельник в 10:00. Дежурный обязан\nреагировать на критичные алерты в течение 15 минут. За дежурную неделю выплачивается\nнадбавка 15 000 рублей.\n","chars":1517},{"source":"06_security.md","title":"Информационная безопасность","text":"# Информационная безопасность\n\n## Классификация данных\n\nВ компании приняты четыре уровня конфиденциальности: публичный, внутренний,\nконфиденциальный и строго конфиденциальный. Персональные данные клиентов относятся\nк строго конфиденциальному уровню. Передача строго конфиденциальных данных\nза пределы корпоративной сети запрещена без письменного разрешения службы\nбезопасности.\n\n## Пароли и доступ\n\nЗапрещено хранить пароли в текстовых файлах, в заметках и в переписке. Используйте\nкорпоративный менеджер паролей. Передача пароля коллеге запрещена даже временно —\nвместо этого оформляется заявка на доступ.\n\n## Шифрование устройств\n\nВсе ноутбуки шифруются с помощью FileVault. Проверить статус шифрования можно\nв разделе «Безопасность» системных настроек. Использование личных устройств\nдля работы с внутренними системами запрещено.\n\n## Фишинг\n\nО подозрительных письмах нужно сообщать в канал `#security` или кнопкой\n«Report phishing». Открывать вложения из незнакомых писем запрещено. Если вы всё же\nввели пароль на фишинговом сайте, немедленно смените пароль и сообщите\nв службу безопасности — наказания за честное признание ошибки не будет.\n\n## Инциденты\n\nОб инциденте безопасности нужно сообщить в течение 1 часа с момента обнаружения.\nСлужба безопасности отвечает на сообщение об инциденте в течение 30 минут\nкруглосуточно. Утечка строго конфиденциальных данных классифицируется как инцидент\nпервого уровня и требует немедленного уведомления директора по безопасности.\n\n## Утеря устройств\n\nОб утере ноутбука или телефона нужно сообщить немедленно, в любое время суток.\nУстройство будет удалённо заблокировано, а учётные данные отозваны. Замена\nустройства производится в течение 2 рабочих дней.\n","chars":1699}],"chunks":[{"i":0,"source":"01_onboarding.md","title":"Онбординг: первый рабочий день","heading":"Онбординг: первый рабочий день","text":"# Онбординг: первый рабочий день","embed_text":"Документ: Онбординг: первый рабочий день › Онбординг: первый рабочий день\n\n# Онбординг: первый рабочий день","chars":32,"vec2":[-0.0056,0.3345],"vec_head":[0.024,0.034,-0.047,0.008,-0.038,-0.011,-0.007,0.058,0.032,-0.021,-0.008,-0.05,0.031,-0.033,0.018,-0.0,0.027,-0.014,0.012,0.016,0.002,0.019,0.057,0.021,-0.05,-0.016,0.032,-0.029,-0.017,-0.009,0.023,-0.024,0.052,-0.019,0.007,-0.006,0.025,0.025,-0.036,0.027]},{"i":1,"source":"01_onboarding.md","title":"Онбординг: первый рабочий день","heading":"До начала работы","text":"## До начала работы\n\nКадровая служба отправляет оффер и ссылку на портал адаптации за 5 рабочих дней до старта.\nЛогин в корпоративных системах выдаётся в формате `ivan.petrov`, корпоративная почта —\n`ivan.petrov@vektor.example`.","embed_text":"Документ: Онбординг: первый рабочий день › До начала работы\n\n## До начала работы\n\nКадровая служба отправляет оффер и ссылку на портал адаптации за 5 рабочих дней до старта.\nЛогин в корпоративных системах выдаётся в формате `ivan.petrov`, корпоративная почта —\n`ivan.petrov@vektor.example`.","chars":228,"vec2":[0.0622,-0.2136],"vec_head":[-0.031,-0.019,-0.048,0.008,-0.011,-0.012,-0.009,-0.009,0.022,-0.028,0.028,-0.013,-0.009,0.001,0.01,0.026,0.028,-0.011,0.013,0.016,0.009,0.008,0.011,0.029,0.001,-0.012,0.01,-0.016,0.038,0.033,0.02,-0.003,0.048,-0.027,0.01,-0.031,0.053,-0.004,-0.052,0.033]},{"i":2,"source":"01_onboarding.md","title":"Онбординг: первый рабочий день","heading":"Первый день","text":"## Первый день\n\nВ 10:00 по московскому времени новый сотрудник встречается с наставником. Наставник\nзакрепляется за сотрудником на весь испытательный срок, который в компании составляет\n3 месяца. За каждым новым сотрудником также закрепляется «buddy» — коллега из другой\nкоманды, с которым можно обсуждать любые вопросы без формальностей.\n\nВ первый день выдаётся ноутбук MacBook Pro 14\" и пропуск в офис. Пропуск активируется\nв течение 2 часов после выдачи.","embed_text":"Документ: Онбординг: первый рабочий день › Первый день\n\n## Первый день\n\nВ 10:00 по московскому времени новый сотрудник встречается с наставником. Наставник\nзакрепляется за сотрудником на весь испытательный срок, который в компании составляет\n3 месяца. За каждым новым сотрудником также закрепляется «buddy» — коллега из другой\nкоманды, с которым можно обсуждать любые вопросы без формальностей.\n\nВ первый день выдаётся ноутбук MacBook Pro 14\" и пропуск в офис. Пропуск активируется\nв течение 2 часов после выдачи.","chars":457,"vec2":[-0.1053,-0.2744],"vec_head":[0.023,-0.02,-0.053,0.012,-0.003,-0.018,-0.003,0.003,0.069,-0.016,-0.006,-0.031,0.028,-0.003,0.062,-0.011,0.009,-0.018,0.018,0.006,0.024,-0.019,0.051,0.052,0.035,0.008,-0.009,-0.028,0.071,0.037,0.002,-0.018,0.037,-0.023,-0.02,0.005,0.058,0.009,-0.043,-0.006]},{"i":3,"source":"01_onboarding.md","title":"Онбординг: первый рабочий день","heading":"Первая неделя","text":"## Первая неделя\n\nВ первую неделю нужно пройти обязательные курсы в учебном портале: информационная\nбезопасность, охрана труда и антикоррупционная политика. Курс по информационной\nбезопасности занимает около 90 минут и должен быть пройден до получения доступа\nк продуктивной среде.","embed_text":"Документ: Онбординг: первый рабочий день › Первая неделя\n\n## Первая неделя\n\nВ первую неделю нужно пройти обязательные курсы в учебном портале: информационная\nбезопасность, охрана труда и антикоррупционная политика. Курс по информационной\nбезопасности занимает около 90 минут и должен быть пройден до получения доступа\nк продуктивной среде.","chars":281,"vec2":[0.0171,-0.1727],"vec_head":[-0.008,0.018,-0.026,0.027,-0.02,-0.022,-0.031,-0.003,-0.008,0.018,-0.002,-0.045,-0.001,-0.017,0.02,0.059,0.038,-0.0,0.045,0.015,0.025,-0.009,0.049,0.004,0.016,0.014,-0.039,-0.055,0.023,0.009,-0.017,-0.023,0.069,-0.032,-0.009,-0.027,0.037,-0.008,-0.038,0.009]},{"i":4,"source":"01_onboarding.md","title":"Онбординг: первый рабочий день","heading":"Доступы","text":"## Доступы\n\nДоступ к продуктивной среде (production) выдаётся только после испытательного срока\nи по согласованию с руководителем. Доступ к репозиториям выдаётся в первый день\nавтоматически. Доступ к базе данных клиентов требует отдельной заявки и согласования\nсо службой безопасности.","embed_text":"Документ: Онбординг: первый рабочий день › Доступы\n\n## Доступы\n\nДоступ к продуктивной среде (production) выдаётся только после испытательного срока\nи по согласованию с руководителем. Доступ к репозиториям выдаётся в первый день\nавтоматически. Доступ к базе данных клиентов требует отдельной заявки и согласования\nсо службой безопасности.","chars":285,"vec2":[0.0925,-0.2102],"vec_head":[0.012,0.003,-0.045,0.053,-0.029,-0.04,-0.006,0.016,0.02,-0.02,-0.026,-0.032,0.025,-0.009,0.06,0.046,0.011,0.0,0.009,0.021,0.017,0.019,0.034,0.005,0.012,0.003,-0.019,-0.023,0.048,-0.002,-0.016,-0.058,-0.007,-0.02,-0.028,-0.015,0.009,-0.019,-0.035,-0.001]},{"i":5,"source":"02_vacation.md","title":"Отпуска и отсутствие на работе","heading":"Отпуска и отсутствие на работе","text":"# Отпуска и отсутствие на работе","embed_text":"Документ: Отпуска и отсутствие на работе › Отпуска и отсутствие на работе\n\n# Отпуска и отсутствие на работе","chars":32,"vec2":[-0.1863,0.4198],"vec_head":[0.016,0.007,-0.044,0.01,-0.024,-0.024,0.003,0.082,0.026,-0.03,0.004,-0.037,-0.008,-0.005,-0.001,0.001,0.014,-0.001,0.004,0.045,-0.014,0.01,0.059,0.066,-0.027,-0.013,0.032,0.004,-0.019,-0.018,0.015,-0.065,0.008,-0.011,0.021,0.018,0.014,-0.021,-0.038,0.065]},{"i":6,"source":"02_vacation.md","title":"Отпуска и отсутствие на работе","heading":"Ежегодный оплачиваемый отпуск","text":"## Ежегодный оплачиваемый отпуск\n\nБазовый ежегодный оплачиваемый отпуск в компании «Вектор» составляет 28 календарных дней.\nДополнительно сотрудникам, проработавшим более 3 лет, предоставляется ещё 4 календарных дня.\nИтого максимальная длительность — 32 календарных дня в год.","embed_text":"Документ: Отпуска и отсутствие на работе › Ежегодный оплачиваемый отпуск\n\n## Ежегодный оплачиваемый отпуск\n\nБазовый ежегодный оплачиваемый отпуск в компании «Вектор» составляет 28 календарных дней.\nДополнительно сотрудникам, проработавшим более 3 лет, предоставляется ещё 4 календарных дня.\nИтого максимальная длительность — 32 календарных дня в год.","chars":276,"vec2":[-0.3567,-0.1482],"vec_head":[-0.039,-0.022,-0.026,0.02,-0.008,-0.1,-0.022,0.021,0.015,-0.009,0.05,-0.001,0.012,-0.004,0.038,-0.004,0.007,-0.003,0.007,0.039,0.019,-0.015,0.048,0.043,-0.017,-0.003,-0.036,0.001,-0.007,0.072,-0.002,-0.049,0.023,-0.01,0.009,0.011,0.04,-0.009,-0.048,0.039]},{"i":7,"source":"02_vacation.md","title":"Отпуска и отсутствие на работе","heading":"Заявление","text":"## Заявление\n\nЗаявление на отпуск подаётся через HR-портал не позднее чем за 14 календарных дней\nдо начала отпуска. Руководитель обязан рассмотреть заявление в течение 3 рабочих дней.\nЕсли руководитель не ответил в этот срок, заявление считается согласованным автоматически.","embed_text":"Документ: Отпуска и отсутствие на работе › Заявление\n\n## Заявление\n\nЗаявление на отпуск подаётся через HR-портал не позднее чем за 14 календарных дней\nдо начала отпуска. Руководитель обязан рассмотреть заявление в течение 3 рабочих дней.\nЕсли руководитель не ответил в этот срок, заявление считается согласованным автоматически.","chars":274,"vec2":[-0.2865,-0.1154],"vec_head":[-0.023,-0.001,-0.017,0.014,-0.023,-0.044,-0.005,0.009,-0.004,-0.03,0.022,0.025,0.005,0.021,0.006,0.054,0.024,-0.02,0.043,0.025,0.026,-0.015,0.059,-0.004,-0.011,-0.013,-0.024,0.054,0.049,0.019,0.008,-0.045,0.001,-0.01,-0.008,-0.009,0.013,-0.022,-0.036,0.054]},{"i":8,"source":"02_vacation.md","title":"Отпуска и отсутствие на работе","heading":"Дробление отпуска","text":"## Дробление отпуска\n\nОтпуск можно дробить. Одна из частей должна быть не менее 14 календарных дней.\nОстальные части — любыми отрезками от 1 дня по согласованию с руководителем.","embed_text":"Документ: Отпуска и отсутствие на работе › Дробление отпуска\n\n## Дробление отпуска\n\nОтпуск можно дробить. Одна из частей должна быть не менее 14 календарных дней.\nОстальные части — любыми отрезками от 1 дня по согласованию с руководителем.","chars":177,"vec2":[-0.3112,-0.0354],"vec_head":[-0.021,0.001,-0.018,0.007,-0.038,-0.028,-0.005,0.02,0.003,-0.016,0.006,-0.026,0.01,-0.005,0.063,0.009,0.022,-0.006,0.026,0.002,0.022,0.021,0.002,0.041,-0.045,-0.012,-0.033,0.032,0.057,0.024,0.005,-0.073,0.068,-0.008,0.01,-0.007,0.027,-0.02,-0.016,0.031]},{"i":9,"source":"02_vacation.md","title":"Отпуска и отсутствие на работе","heading":"Перенос и компенсация","text":"## Перенос и компенсация\n\nНеиспользованные дни отпуска переносятся на следующий год, но не более 10 дней.\nДенежная компенсация за неиспользованный отпуск возможна только при увольнении.\nПеренос более 10 дней допускается только с письменного разрешения директора\nпо персоналу.","embed_text":"Документ: Отпуска и отсутствие на работе › Перенос и компенсация\n\n## Перенос и компенсация\n\nНеиспользованные дни отпуска переносятся на следующий год, но не более 10 дней.\nДенежная компенсация за неиспользованный отпуск возможна только при увольнении.\nПеренос более 10 дней допускается только с письменного разрешения директора\nпо персоналу.","chars":275,"vec2":[-0.3914,-0.0179],"vec_head":[-0.007,0.022,-0.019,0.033,-0.035,-0.07,0.024,0.036,0.02,-0.007,0.013,-0.005,-0.009,0.031,0.005,0.011,-0.007,-0.008,-0.024,0.012,0.042,-0.017,0.056,0.032,-0.007,-0.006,-0.015,0.038,0.038,0.047,0.001,-0.033,0.062,0.006,0.012,-0.009,0.01,-0.022,-0.034,0.046]},{"i":10,"source":"02_vacation.md","title":"Отпуска и отсутствие на работе","heading":"Больничный","text":"## Больничный\n\nБольничный оформляется в электронном виде. Сотрудник обязан уведомить руководителя\nв первый день отсутствия, любым удобным способом. Больничный оплачивается согласно\nзаконодательству: первые 3 дня за счёт компании, остальные — за счёт фонда.","embed_text":"Документ: Отпуска и отсутствие на работе › Больничный\n\n## Больничный\n\nБольничный оформляется в электронном виде. Сотрудник обязан уведомить руководителя\nв первый день отсутствия, любым удобным способом. Больничный оплачивается согласно\nзаконодательству: первые 3 дня за счёт компании, остальные — за счёт фонда.","chars":256,"vec2":[-0.2636,-0.0128],"vec_head":[-0.043,0.012,0.002,0.013,-0.017,-0.046,0.034,0.024,0.003,-0.013,0.02,0.042,0.033,0.001,0.016,-0.007,0.009,-0.019,0.014,0.016,0.02,0.009,0.047,0.001,-0.012,0.004,0.024,0.009,0.005,0.01,0.001,-0.064,0.007,-0.007,-0.014,0.023,0.002,0.002,-0.031,0.067]},{"i":11,"source":"02_vacation.md","title":"Отпуска и отсутствие на работе","heading":"Отгулы","text":"## Отгулы\n\nОтгул за работу в выходные предоставляется в двойном размере: два отгула за один\nотработанный выходной день. Отгулы нужно использовать в течение 6 месяцев.","embed_text":"Документ: Отпуска и отсутствие на работе › Отгулы\n\n## Отгулы\n\nОтгул за работу в выходные предоставляется в двойном размере: два отгула за один\nотработанный выходной день. Отгулы нужно использовать в течение 6 месяцев.","chars":166,"vec2":[-0.3522,-0.0008],"vec_head":[-0.031,0.019,-0.051,0.016,-0.037,-0.046,-0.006,0.056,0.004,-0.022,0.002,-0.002,-0.003,-0.002,0.023,0.038,0.0,-0.02,-0.004,-0.006,0.048,0.009,0.04,0.059,-0.02,-0.013,-0.066,0.009,0.056,0.039,0.006,-0.06,0.03,0.024,-0.02,0.026,0.011,-0.021,-0.026,0.056]},{"i":12,"source":"03_vpn_access.md","title":"Удалённый доступ и VPN","heading":"Удалённый доступ и VPN","text":"# Удалённый доступ и VPN","embed_text":"Документ: Удалённый доступ и VPN › Удалённый доступ и VPN\n\n# Удалённый доступ и VPN","chars":24,"vec2":[0.3149,0.3925],"vec_head":[0.012,0.016,-0.028,-0.002,-0.055,0.006,0.047,0.046,0.031,-0.012,-0.002,0.007,-0.016,-0.009,-0.007,-0.058,0.02,0.024,0.055,0.004,-0.011,0.026,0.021,0.057,-0.003,-0.003,0.043,-0.006,-0.042,-0.02,0.027,-0.048,0.016,-0.013,0.018,-0.004,-0.055,0.003,-0.045,0.068]},{"i":13,"source":"03_vpn_access.md","title":"Удалённый доступ и VPN","heading":"Когда нужен VPN","text":"## Когда нужен VPN\n\nКорпоративный VPN обязателен для любого доступа к внутренним системам извне офиса.\nБез VPN недоступны: git-сервер, внутренние дашборды, база данных, система тикетов.","embed_text":"Документ: Удалённый доступ и VPN › Когда нужен VPN\n\n## Когда нужен VPN\n\nКорпоративный VPN обязателен для любого доступа к внутренним системам извне офиса.\nБез VPN недоступны: git-сервер, внутренние дашборды, база данных, система тикетов.","chars":185,"vec2":[0.3646,-0.082],"vec_head":[-0.048,-0.005,-0.012,0.04,-0.019,0.007,0.009,-0.031,0.009,0.016,0.009,-0.04,-0.014,-0.006,0.045,-0.006,0.035,0.005,0.049,0.014,-0.01,-0.01,-0.011,0.013,0.019,0.02,-0.003,0.01,0.016,-0.014,-0.004,-0.032,0.035,-0.031,-0.035,-0.036,-0.02,-0.03,-0.024,0.029]},{"i":14,"source":"03_vpn_access.md","title":"Удалённый доступ и VPN","heading":"Подключение","text":"## Подключение\n\nVPN работает через клиент WireGuard. Конфигурационный файл выдаёт служба поддержки\nпо заявке. Заявка рассматривается в течение 1 рабочего дня. Один сотрудник может\nполучить не более 3 устройств.","embed_text":"Документ: Удалённый доступ и VPN › Подключение\n\n## Подключение\n\nVPN работает через клиент WireGuard. Конфигурационный файл выдаёт служба поддержки\nпо заявке. Заявка рассматривается в течение 1 рабочего дня. Один сотрудник может\nполучить не более 3 устройств.","chars":210,"vec2":[0.2948,-0.197],"vec_head":[-0.015,-0.011,-0.026,0.019,-0.033,-0.016,0.025,0.009,0.003,0.012,0.005,0.003,-0.002,-0.012,0.026,-0.003,-0.022,-0.029,0.068,-0.028,0.029,-0.009,0.026,0.048,0.055,-0.014,-0.018,0.007,0.054,-0.008,-0.011,-0.028,0.012,-0.027,0.01,-0.005,-0.031,-0.024,-0.035,0.042]},{"i":15,"source":"03_vpn_access.md","title":"Удалённый доступ и VPN","heading":"Двухфакторная аутентификация","text":"## Двухфакторная аутентификация\n\n2FA обязательна для VPN, почты и git-сервера. Поддерживаются TOTP-приложения\n(Google Authenticator, Aegis, 1Password) и аппаратные ключи YubiKey.\nSMS как второй фактор не поддерживается.","embed_text":"Документ: Удалённый доступ и VPN › Двухфакторная аутентификация\n\n## Двухфакторная аутентификация\n\n2FA обязательна для VPN, почты и git-сервера. Поддерживаются TOTP-приложения\n(Google Authenticator, Aegis, 1Password) и аппаратные ключи YubiKey.\nSMS как второй фактор не поддерживается.","chars":219,"vec2":[0.435,-0.0519],"vec_head":[-0.041,-0.0,-0.008,0.008,-0.012,-0.018,0.045,0.009,-0.005,0.007,-0.004,-0.016,0.007,-0.009,0.001,-0.0,0.009,-0.008,0.051,-0.021,-0.054,0.007,-0.012,-0.003,0.015,0.04,-0.042,-0.035,0.021,0.024,-0.01,-0.023,-0.001,-0.022,-0.017,-0.028,-0.021,-0.047,-0.043,0.032]},{"i":16,"source":"03_vpn_access.md","title":"Удалённый доступ и VPN","heading":"Смена пароля","text":"## Смена пароля\n\nПароль корпоративной учётной записи меняется каждые 180 дней. Пароль должен содержать\nне менее 14 символов. Повторное использование последних 10 паролей запрещено.\nПосле 5 неудачных попыток входа учётная запись блокируется на 30 минут.","embed_text":"Документ: Удалённый доступ и VPN › Смена пароля\n\n## Смена пароля\n\nПароль корпоративной учётной записи меняется каждые 180 дней. Пароль должен содержать\nне менее 14 символов. Повторное использование последних 10 паролей запрещено.\nПосле 5 неудачных попыток входа учётная запись блокируется на 30 минут.","chars":252,"vec2":[0.1828,-0.2084],"vec_head":[-0.021,0.019,-0.027,0.009,-0.065,-0.051,0.019,-0.013,0.017,-0.039,-0.003,-0.008,-0.016,-0.011,0.029,-0.027,0.013,-0.009,0.037,0.009,-0.023,0.005,0.025,0.02,-0.014,0.013,-0.036,0.003,0.034,0.043,-0.015,-0.014,0.04,-0.019,0.046,0.021,-0.016,-0.014,-0.046,0.039]},{"i":17,"source":"03_vpn_access.md","title":"Удалённый доступ и VPN","heading":"Проблемы с доступом","text":"## Проблемы с доступом\n\nЕсли VPN не подключается, в первую очередь нужно проверить системное время на устройстве:\nрассинхронизация более 60 секунд ломает рукопожатие. Если время верное, обратитесь\nв поддержку в канале `#it-help` в корпоративном мессенджере. Срочные инциденты\nс доступом решаются дежурным инженером круглосуточно.","embed_text":"Документ: Удалённый доступ и VPN › Проблемы с доступом\n\n## Проблемы с доступом\n\nЕсли VPN не подключается, в первую очередь нужно проверить системное время на устройстве:\nрассинхронизация более 60 секунд ломает рукопожатие. Если время верное, обратитесь\nв поддержку в канале `#it-help` в корпоративном мессенджере. Срочные инциденты\nс доступом решаются дежурным инженером круглосуточно.","chars":329,"vec2":[0.2909,-0.198],"vec_head":[0.001,0.01,-0.003,-0.004,-0.054,0.005,0.036,0.025,0.003,0.028,0.018,-0.027,-0.003,-0.005,0.036,0.017,0.012,0.008,0.054,-0.024,0.04,0.005,-0.014,0.019,0.046,0.023,-0.02,0.008,0.047,-0.012,-0.009,-0.031,0.033,-0.056,-0.058,-0.005,-0.027,-0.013,-0.022,0.054]},{"i":18,"source":"04_expenses.md","title":"Командировки и возмещение расходов","heading":"Командировки и возмещение расходов","text":"# Командировки и возмещение расходов","embed_text":"Документ: Командировки и возмещение расходов › Командировки и возмещение расходов\n\n# Командировки и возмещение расходов","chars":36,"vec2":[-0.2113,0.5331],"vec_head":[0.017,0.012,-0.029,-0.016,-0.023,-0.032,0.06,0.054,0.025,-0.045,0.01,-0.042,-0.006,0.018,-0.013,0.007,0.011,0.013,-0.023,-0.016,0.039,-0.025,0.028,0.025,-0.027,-0.041,0.02,0.011,-0.005,-0.014,0.038,-0.036,0.043,0.017,-0.009,0.007,-0.007,-0.013,-0.042,0.06]},{"i":19,"source":"04_expenses.md","title":"Командировки и возмещение расходов","heading":"Суточные","text":"## Суточные\n\nСуточные при командировке по России составляют 3000 рублей в сутки.\nПри зарубежной командировке — 80 евро в сутки. Суточные выплачиваются\nавансом вместе с командировочным авансом.","embed_text":"Документ: Командировки и возмещение расходов › Суточные\n\n## Суточные\n\nСуточные при командировке по России составляют 3000 рублей в сутки.\nПри зарубежной командировке — 80 евро в сутки. Суточные выплачиваются\nавансом вместе с командировочным авансом.","chars":192,"vec2":[-0.4277,0.0322],"vec_head":[-0.038,0.017,-0.03,-0.019,-0.024,-0.027,0.024,0.047,0.009,0.004,0.007,-0.015,-0.008,-0.026,0.029,0.037,-0.013,-0.007,-0.021,-0.024,0.044,-0.012,0.029,0.027,0.009,-0.04,-0.058,0.049,0.062,0.029,0.028,-0.057,0.073,0.006,-0.054,0.017,0.013,0.035,-0.052,0.053]},{"i":20,"source":"04_expenses.md","title":"Командировки и возмещение расходов","heading":"Лимиты на проживание","text":"## Лимиты на проживание\n\nЛимит на гостиницу в Москве и Санкт-Петербурге — 12 000 рублей в сутки.\nВ других городах России — 7 000 рублей в сутки. Превышение лимита возможно\nтолько с предварительного письменного согласования руководителя.","embed_text":"Документ: Командировки и возмещение расходов › Лимиты на проживание\n\n## Лимиты на проживание\n\nЛимит на гостиницу в Москве и Санкт-Петербурге — 12 000 рублей в сутки.\nВ других городах России — 7 000 рублей в сутки. Превышение лимита возможно\nтолько с предварительного письменного согласования руководителя.","chars":236,"vec2":[-0.3057,0.0219],"vec_head":[-0.014,0.009,-0.017,-0.011,-0.014,-0.057,-0.017,0.024,0.012,-0.031,-0.014,0.022,-0.016,-0.016,0.02,0.034,-0.013,-0.023,-0.042,-0.034,0.009,-0.022,0.022,0.009,0.016,-0.043,-0.036,0.041,0.056,0.043,0.046,-0.096,0.072,-0.047,0.022,-0.048,0.017,0.038,-0.031,0.049]},{"i":21,"source":"04_expenses.md","title":"Командировки и возмещение расходов","heading":"Такси и транспорт","text":"## Такси и транспорт\n\nТакси в командировке компенсируется без ограничений при наличии чека, но только\nв поездках, связанных с рабочими задачами. Аэроэкспресс и общественный транспорт\nкомпенсируются всегда. Аренда автомобиля согласуется отдельно.","embed_text":"Документ: Командировки и возмещение расходов › Такси и транспорт\n\n## Такси и транспорт\n\nТакси в командировке компенсируется без ограничений при наличии чека, но только\nв поездках, связанных с рабочими задачами. Аэроэкспресс и общественный транспорт\nкомпенсируются всегда. Аренда автомобиля согласуется отдельно.","chars":245,"vec2":[-0.3087,0.1912],"vec_head":[-0.009,-0.011,-0.007,0.009,-0.005,-0.055,0.052,0.035,0.016,0.003,0.019,-0.04,0.011,0.019,0.024,-0.003,-0.021,0.011,-0.029,-0.035,0.014,-0.007,-0.01,0.006,-0.012,-0.01,-0.005,0.028,0.048,0.04,0.028,-0.015,0.03,0.019,-0.037,-0.005,-0.001,-0.035,-0.034,0.055]},{"i":22,"source":"04_expenses.md","title":"Командировки и возмещение расходов","heading":"Отчётность","text":"## Отчётность\n\nОтчёт по командировке подаётся в течение 5 рабочих дней после возвращения.\nК отчёту прикладываются все чеки. Если чек утерян, пишется объяснительная записка.\nОбработка отчёта бухгалтерией занимает до 10 рабочих дней, выплата приходит\nв ближайшую зарплату.","embed_text":"Документ: Командировки и возмещение расходов › Отчётность\n\n## Отчётность\n\nОтчёт по командировке подаётся в течение 5 рабочих дней после возвращения.\nК отчёту прикладываются все чеки. Если чек утерян, пишется объяснительная записка.\nОбработка отчёта бухгалтерией занимает до 10 рабочих дней, выплата приходит\nв ближайшую зарплату.","chars":270,"vec2":[-0.3158,-0.0931],"vec_head":[-0.013,-0.015,-0.041,-0.002,-0.007,-0.061,-0.018,0.021,0.025,-0.019,0.027,0.001,0.019,0.065,0.0,0.064,-0.007,0.004,0.021,0.007,0.065,-0.014,0.071,0.004,-0.001,-0.031,-0.044,0.05,0.073,0.012,0.009,-0.048,0.03,0.027,-0.031,-0.014,0.02,0.014,-0.04,0.084]},{"i":23,"source":"04_expenses.md","title":"Командировки и возмещение расходов","heading":"Обучение и конференции","text":"## Обучение и конференции\n\nОплата конференций и курсов согласуется с руководителем. Бюджет на обучение —\n60 000 рублей на сотрудника в год. Неиспользованный бюджет не переносится\nна следующий год и не обменивается на деньги.","embed_text":"Документ: Командировки и возмещение расходов › Обучение и конференции\n\n## Обучение и конференции\n\nОплата конференций и курсов согласуется с руководителем. Бюджет на обучение —\n60 000 рублей на сотрудника в год. Неиспользованный бюджет не переносится\nна следующий год и не обменивается на деньги.","chars":224,"vec2":[-0.3131,0.056],"vec_head":[-0.006,-0.018,-0.049,-0.005,-0.02,-0.041,-0.005,-0.019,0.019,-0.035,0.021,-0.016,0.007,0.02,0.018,-0.035,-0.004,0.001,-0.019,-0.015,0.025,-0.021,0.055,-0.006,-0.013,-0.033,-0.043,-0.007,0.047,0.024,0.0,-0.038,0.102,0.031,0.011,-0.04,0.039,-0.016,-0.035,0.033]},{"i":24,"source":"05_engineering.md","title":"Инженерные практики: код, ревью, деплой","heading":"Инженерные практики: код, ревью, деплой","text":"# Инженерные практики: код, ревью, деплой","embed_text":"Документ: Инженерные практики: код, ревью, деплой › Инженерные практики: код, ревью, деплой\n\n# Инженерные практики: код, ревью, деплой","chars":41,"vec2":[0.1148,0.2446],"vec_head":[0.011,0.015,-0.02,-0.023,-0.029,-0.019,-0.007,0.039,0.032,0.013,0.001,-0.063,-0.008,-0.008,-0.007,0.008,0.012,0.014,-0.004,-0.015,-0.027,0.058,0.028,0.004,-0.0,-0.01,-0.0,-0.019,0.03,0.036,0.028,0.016,0.024,0.007,-0.048,-0.014,-0.002,-0.002,-0.045,0.024]},{"i":25,"source":"05_engineering.md","title":"Инженерные практики: код, ревью, деплой","heading":"Стек","text":"## Стек\n\nОсновной стек компании «Вектор»: Python 3.12 для бэкенда, TypeScript и React для\nфронтенда, PostgreSQL как основная база данных, Redis для кеша. Сервисы упакованы\nв Docker и запускаются в Kubernetes.","embed_text":"Документ: Инженерные практики: код, ревью, деплой › Стек\n\n## Стек\n\nОсновной стек компании «Вектор»: Python 3.12 для бэкенда, TypeScript и React для\nфронтенда, PostgreSQL как основная база данных, Redis для кеша. Сервисы упакованы\nв Docker и запускаются в Kubernetes.","chars":208,"vec2":[0.2444,-0.1332],"vec_head":[-0.053,-0.031,-0.045,-0.01,0.006,0.005,-0.027,0.031,0.041,-0.012,0.008,0.033,-0.001,0.028,0.018,0.001,0.009,0.022,0.043,0.004,-0.02,-0.003,0.023,0.027,0.021,0.006,0.016,-0.027,0.002,0.04,0.046,0.021,0.038,-0.001,-0.041,-0.039,0.015,-0.028,-0.041,0.054]},{"i":26,"source":"05_engineering.md","title":"Инженерные практики: код, ревью, деплой","heading":"Ветки и code review","text":"## Ветки и code review\n\nИспользуется trunk-based development: основная ветка — `main`. Фича-ветки живут\nне дольше 3 дней, чтобы избежать болезненных слияний. Каждый pull request требует\nминимум одного одобрения. PR, затрагивающий более 400 строк, требует двух одобрений.\nАвтор не может одобрить собственный PR.\n\nВремя реакции на ревью — не более 4 рабочих часов в рабочее время. Если ревьюер\nне отвечает сутки, разрешается обратиться к тимлиду.","embed_text":"Документ: Инженерные практики: код, ревью, деплой › Ветки и code review\n\n## Ветки и code review\n\nИспользуется trunk-based development: основная ветка — `main`. Фича-ветки живут\nне дольше 3 дней, чтобы избежать болезненных слияний. Каждый pull request требует\nминимум одного одобрения. PR, затрагивающий более 400 строк, требует двух одобрений.\nАвтор не может одобрить собственный PR.\n\nВремя реакции на ревью — не более 4 рабочих часов в рабочее время. Если ревьюер\nне отвечает сутки, разрешается обратиться к тимлиду.","chars":444,"vec2":[0.0895,-0.2641],"vec_head":[-0.034,-0.015,0.005,0.009,-0.012,-0.076,-0.012,0.014,-0.004,0.026,-0.011,0.011,0.016,0.02,-0.002,0.01,-0.003,-0.014,0.023,-0.001,0.035,0.053,-0.032,0.044,0.026,-0.019,-0.047,0.009,0.041,0.067,0.014,0.029,0.052,-0.043,-0.048,-0.034,0.01,-0.004,-0.031,0.016]},{"i":27,"source":"05_engineering.md","title":"Инженерные практики: код, ревью, деплой","heading":"Тесты и качество","text":"## Тесты и качество\n\nПокрытие тестами нового кода должно быть не ниже 70%. Пайплайн CI прогоняет линтер,\nтипы и тесты. Красный CI блокирует слияние. Слияние в `main` возможно только\nчерез squash-коммит.","embed_text":"Документ: Инженерные практики: код, ревью, деплой › Тесты и качество\n\n## Тесты и качество\n\nПокрытие тестами нового кода должно быть не ниже 70%. Пайплайн CI прогоняет линтер,\nтипы и тесты. Красный CI блокирует слияние. Слияние в `main` возможно только\nчерез squash-коммит.","chars":202,"vec2":[0.2275,-0.0588],"vec_head":[-0.065,-0.022,-0.013,-0.008,-0.007,-0.015,-0.028,0.032,-0.025,0.037,-0.025,-0.01,0.038,0.003,-0.003,-0.041,-0.031,-0.015,-0.008,-0.022,-0.018,0.005,-0.064,0.004,0.033,-0.002,-0.02,-0.041,-0.001,0.056,0.035,0.0,0.073,-0.018,-0.029,-0.051,0.008,-0.037,-0.028,0.019]},{"i":28,"source":"05_engineering.md","title":"Инженерные практики: код, ревью, деплой","heading":"Деплой","text":"## Деплой\n\nДеплой в продуктивную среду происходит по вторникам и четвергам, с 11:00 до 16:00\nпо московскому времени. В пятницу деплой запрещён. Исключение — хотфиксы, которые\nсогласует дежурный тимлид.\n\nДеплой идёт поэтапно: сначала на 5% трафика, затем на 25%, затем на 100%.\nМежду этапами выдерживается 15 минут наблюдения за метриками. Откат (rollback)\nвыполняется одной командой и занимает около 2 минут.","embed_text":"Документ: Инженерные практики: код, ревью, деплой › Деплой\n\n## Деплой\n\nДеплой в продуктивную среду происходит по вторникам и четвергам, с 11:00 до 16:00\nпо московскому времени. В пятницу деплой запрещён. Исключение — хотфиксы, которые\nсогласует дежурный тимлид.\n\nДеплой идёт поэтапно: сначала на 5% трафика, затем на 25%, затем на 100%.\nМежду этапами выдерживается 15 минут наблюдения за метриками. Откат (rollback)\nвыполняется одной командой и занимает около 2 минут.","chars":408,"vec2":[-0.018,-0.2357],"vec_head":[-0.047,-0.038,0.01,0.021,-0.035,-0.02,-0.015,0.041,0.025,-0.02,-0.024,0.027,0.022,0.015,0.05,0.001,0.008,0.014,0.008,0.018,-0.005,-0.01,-0.014,0.023,0.012,0.008,-0.018,0.002,0.056,0.083,0.022,0.003,0.044,-0.019,-0.066,-0.026,-0.001,-0.023,-0.041,0.023]},{"i":29,"source":"05_engineering.md","title":"Инженерные практики: код, ревью, деплой","heading":"Дежурства","text":"## Дежурства\n\nДежурство длится одну неделю и начинается в понедельник в 10:00. Дежурный обязан\nреагировать на критичные алерты в течение 15 минут. За дежурную неделю выплачивается\nнадбавка 15 000 рублей.","embed_text":"Документ: Инженерные практики: код, ревью, деплой › Дежурства\n\n## Дежурства\n\nДежурство длится одну неделю и начинается в понедельник в 10:00. Дежурный обязан\nреагировать на критичные алерты в течение 15 минут. За дежурную неделю выплачивается\nнадбавка 15 000 рублей.","chars":203,"vec2":[-0.2369,-0.1806],"vec_head":[-0.009,0.011,-0.007,-0.016,-0.068,-0.038,-0.011,0.037,0.014,-0.017,-0.004,-0.018,-0.015,0.009,0.032,0.039,-0.007,-0.005,0.006,-0.008,0.027,-0.015,0.013,0.028,-0.001,-0.0,-0.052,0.021,0.069,0.052,-0.02,-0.06,0.03,-0.024,-0.014,0.007,0.031,0.004,-0.04,0.038]},{"i":30,"source":"06_security.md","title":"Информационная безопасность","heading":"Информационная безопасность","text":"# Информационная безопасность","embed_text":"Документ: Информационная безопасность › Информационная безопасность\n\n# Информационная безопасность","chars":29,"vec2":[0.2497,0.5204],"vec_head":[0.037,0.011,-0.029,0.007,-0.061,-0.006,0.028,0.06,0.012,-0.015,-0.013,-0.032,-0.001,-0.023,0.026,0.015,0.044,0.033,-0.001,0.04,-0.008,0.018,0.022,0.042,-0.016,0.003,0.067,-0.024,-0.065,0.0,-0.009,-0.049,0.03,0.007,-0.01,-0.015,-0.04,-0.013,-0.041,0.041]},{"i":31,"source":"06_security.md","title":"Информационная безопасность","heading":"Классификация данных","text":"## Классификация данных\n\nВ компании приняты четыре уровня конфиденциальности: публичный, внутренний,\nконфиденциальный и строго конфиденциальный. Персональные данные клиентов относятся\nк строго конфиденциальному уровню. Передача строго конфиденциальных данных\nза пределы корпоративной сети запрещена без письменного разрешения службы\nбезопасности.","embed_text":"Документ: Информационная безопасность › Классификация данных\n\n## Классификация данных\n\nВ компании приняты четыре уровня конфиденциальности: публичный, внутренний,\nконфиденциальный и строго конфиденциальный. Персональные данные клиентов относятся\nк строго конфиденциальному уровню. Передача строго конфиденциальных данных\nза пределы корпоративной сети запрещена без письменного разрешения службы\nбезопасности.","chars":346,"vec2":[0.3332,0.0563],"vec_head":[-0.023,-0.012,-0.037,0.026,-0.018,-0.016,0.01,-0.006,0.028,0.0,-0.014,0.007,-0.001,-0.03,0.076,0.066,-0.008,-0.026,-0.021,-0.012,-0.021,0.073,-0.031,0.039,-0.015,0.017,-0.017,-0.039,-0.037,0.034,0.016,-0.011,0.058,-0.004,0.011,-0.03,-0.006,-0.062,-0.033,-0.015]},{"i":32,"source":"06_security.md","title":"Информационная безопасность","heading":"Пароли и доступ","text":"## Пароли и доступ\n\nЗапрещено хранить пароли в текстовых файлах, в заметках и в переписке. Используйте\nкорпоративный менеджер паролей. Передача пароля коллеге запрещена даже временно —\nвместо этого оформляется заявка на доступ.","embed_text":"Документ: Информационная безопасность › Пароли и доступ\n\n## Пароли и доступ\n\nЗапрещено хранить пароли в текстовых файлах, в заметках и в переписке. Используйте\nкорпоративный менеджер паролей. Передача пароля коллеге запрещена даже временно —\nвместо этого оформляется заявка на доступ.","chars":227,"vec2":[0.2349,0.1096],"vec_head":[0.004,0.043,-0.048,0.015,-0.05,-0.051,0.024,0.023,0.024,-0.061,-0.022,-0.006,0.009,-0.021,0.038,0.047,0.018,0.009,-0.011,-0.004,0.014,0.008,-0.016,0.019,-0.021,-0.022,-0.02,-0.005,0.019,0.035,-0.018,-0.044,0.031,-0.004,0.004,0.013,-0.029,-0.024,-0.019,0.027]},{"i":33,"source":"06_security.md","title":"Информационная безопасность","heading":"Шифрование устройств","text":"## Шифрование устройств\n\nВсе ноутбуки шифруются с помощью FileVault. Проверить статус шифрования можно\nв разделе «Безопасность» системных настроек. Использование личных устройств\nдля работы с внутренними системами запрещено.","embed_text":"Документ: Информационная безопасность › Шифрование устройств\n\n## Шифрование устройств\n\nВсе ноутбуки шифруются с помощью FileVault. Проверить статус шифрования можно\nв разделе «Безопасность» системных настроек. Использование личных устройств\nдля работы с внутренними системами запрещено.","chars":224,"vec2":[0.4025,0.0749],"vec_head":[-0.009,-0.008,-0.022,0.026,-0.038,-0.016,0.03,0.017,0.015,-0.014,0.007,-0.009,0.005,-0.032,0.071,-0.013,-0.014,0.004,0.009,-0.04,-0.018,0.019,0.02,0.042,0.01,0.003,-0.027,-0.033,0.017,0.015,0.024,0.006,-0.0,-0.012,-0.023,-0.009,0.011,-0.057,-0.025,0.042]},{"i":34,"source":"06_security.md","title":"Информационная безопасность","heading":"Фишинг","text":"## Фишинг\n\nО подозрительных письмах нужно сообщать в канал `#security` или кнопкой\n«Report phishing». Открывать вложения из незнакомых писем запрещено. Если вы всё же\nввели пароль на фишинговом сайте, немедленно смените пароль и сообщите\nв службу безопасности — наказания за честное признание ошибки не будет.","embed_text":"Документ: Информационная безопасность › Фишинг\n\n## Фишинг\n\nО подозрительных письмах нужно сообщать в канал `#security` или кнопкой\n«Report phishing». Открывать вложения из незнакомых писем запрещено. Если вы всё же\nввели пароль на фишинговом сайте, немедленно смените пароль и сообщите\nв службу безопасности — наказания за честное признание ошибки не будет.","chars":309,"vec2":[0.3172,0.1544],"vec_head":[-0.038,-0.02,-0.009,0.024,-0.021,-0.037,0.031,0.014,-0.037,0.001,-0.041,0.01,0.001,-0.005,0.004,-0.013,0.018,-0.013,-0.008,0.017,-0.037,0.025,0.001,0.016,0.011,0.022,-0.013,-0.017,0.011,-0.033,0.026,-0.021,0.027,-0.033,-0.017,-0.02,-0.031,-0.003,-0.001,0.015]},{"i":35,"source":"06_security.md","title":"Информационная безопасность","heading":"Инциденты","text":"## Инциденты\n\nОб инциденте безопасности нужно сообщить в течение 1 часа с момента обнаружения.\nСлужба безопасности отвечает на сообщение об инциденте в течение 30 минут\nкруглосуточно. Утечка строго конфиденциальных данных классифицируется как инцидент\nпервого уровня и требует немедленного уведомления директора по безопасности.","embed_text":"Документ: Информационная безопасность › Инциденты\n\n## Инциденты\n\nОб инциденте безопасности нужно сообщить в течение 1 часа с момента обнаружения.\nСлужба безопасности отвечает на сообщение об инциденте в течение 30 минут\nкруглосуточно. Утечка строго конфиденциальных данных классифицируется как инцидент\nпервого уровня и требует немедленного уведомления директора по безопасности.","chars":328,"vec2":[0.1093,-0.1386],"vec_head":[0.004,0.01,-0.009,0.03,-0.025,-0.033,-0.044,0.027,0.021,-0.008,-0.012,0.018,-0.004,-0.009,0.094,0.079,0.025,0.002,0.003,0.009,0.004,0.024,0.026,0.007,0.01,0.018,-0.005,-0.008,0.022,0.027,0.022,-0.012,0.048,-0.011,-0.044,0.02,-0.0,-0.035,-0.028,0.039]},{"i":36,"source":"06_security.md","title":"Информационная безопасность","heading":"Утеря устройств","text":"## Утеря устройств\n\nОб утере ноутбука или телефона нужно сообщить немедленно, в любое время суток.\nУстройство будет удалённо заблокировано, а учётные данные отозваны. Замена\nустройства производится в течение 2 рабочих дней.","embed_text":"Документ: Информационная безопасность › Утеря устройств\n\n## Утеря устройств\n\nОб утере ноутбука или телефона нужно сообщить немедленно, в любое время суток.\nУстройство будет удалённо заблокировано, а учётные данные отозваны. Замена\nустройства производится в течение 2 рабочих дней.","chars":223,"vec2":[0.018,-0.0987],"vec_head":[0.006,0.015,-0.054,0.023,-0.047,-0.063,-0.01,0.023,0.031,-0.023,0.023,0.004,-0.008,0.022,0.029,0.026,0.009,0.004,0.039,0.015,0.03,-0.027,0.053,0.013,-0.008,0.015,-0.024,0.015,0.061,0.032,-0.015,-0.031,-0.011,-0.008,-0.037,0.02,-0.014,-0.039,-0.032,0.049]}],"queries":[{"q":"Сколько дней отпуска положено сотруднику?","needle":"28 календарных","correct_chunk":6,"scores":{"bge-m3":[0.32159,0.48485,0.5511,0.47609,0.44243,0.48606,0.67872,0.62495,0.66678,0.62479,0.55596,0.65645,0.22384,0.29424,0.40735,0.27502,0.49947,0.34127,0.29883,0.45228,0.39525,0.4089,0.53181,0.45639,0.2747,0.29543,0.41927,0.31131,0.45151,0.51525,0.21846,0.34493,0.36002,0.24394,0.25824,0.43775,0.45393],"nomic-embed-text":[0.69514,0.74409,0.76978,0.7621,0.77209,0.71243,0.76814,0.78426,0.77914,0.76841,0.78795,0.76792,0.66307,0.70471,0.72351,0.68684,0.73848,0.72489,0.63641,0.70827,0.68404,0.71976,0.70673,0.7107,0.76484,0.73771,0.75959,0.74833,0.79492,0.76949,0.64091,0.69866,0.73722,0.67038,0.68607,0.70633,0.74267]},"vec2":[-0.3293,-0.2309],"answer_no_rag":"ДAYS OFF VARY BY COUNTRY AND EMPLOYER POLICY, BUT IN RUSSIA, EMPLOYEES ARE ENTITLED TO 28 DAYS OF PAID VACATION PER YEAR BASED ON THE LENGTH OF SERVICE.","answer_rag":"Базовый ежегодный оплачиваемый отпуск в компании «Вектор» составляет 28 календарных дней. Дополнительно сотрудникам, проработавшим более 3 лет, предоставляется ещё 4 календарных дня, итого максимальная длительность — 32 календарных дня в год [1].","prompt":"Фрагменты:\n\n[1] (источник: 02_vacation.md, раздел «Ежегодный оплачиваемый отпуск»)\n## Ежегодный оплачиваемый отпуск\n\nБазовый ежегодный оплачиваемый отпуск в компании «Вектор» составляет 28 календарных дней.\nДополнительно сотрудникам, проработавшим более 3 лет, предоставляется ещё 4 календарных дня.\nИтого максимальная длительность — 32 календарных дня в год.\n\n[2] (источник: 02_vacation.md, раздел «Дробление отпуска»)\n## Дробление отпуска\n\nОтпуск можно дробить. Одна из частей должна быть не менее 14 календарных дней.\nОстальные части — любыми отрезками от 1 дня по согласованию с руководителем.\n\n[3] (источник: 02_vacation.md, раздел «Отгулы»)\n## Отгулы\n\nОтгул за работу в выходные предоставляется в двойном размере: два отгула за один\nотработанный выходной день. Отгулы нужно использовать в течение 6 месяцев.\n\n[4] (источник: 02_vacation.md, раздел «Заявление»)\n## Заявление\n\nЗаявление на отпуск подаётся через HR-портал не позднее чем за 14 календарных дней\nдо начала отпуска. Руководитель обязан рассмотреть заявление в течение 3 рабочих дней.\nЕсли руководитель не ответил в этот срок, заявление считается согласованным автоматически.\n\n---\n\nВопрос: Сколько дней отпуска положено сотруднику?"},{"q":"За сколько дней нужно подать заявление на отпуск?","needle":"за 14 календарных","correct_chunk":7,"scores":{"bge-m3":[0.315,0.51704,0.51029,0.50673,0.4905,0.4568,0.57644,0.78048,0.61773,0.62863,0.60159,0.61491,0.25782,0.356,0.43032,0.328,0.50868,0.42236,0.32996,0.43568,0.44472,0.44105,0.60636,0.45489,0.25026,0.2812,0.45603,0.31887,0.48299,0.53959,0.24687,0.35615,0.39225,0.26142,0.37077,0.52015,0.51955],"nomic-embed-text":[0.65857,0.72966,0.74353,0.75606,0.74005,0.71738,0.76602,0.81672,0.75897,0.75659,0.77575,0.78557,0.67724,0.7008,0.73864,0.69824,0.74017,0.71574,0.63076,0.69709,0.66314,0.70476,0.73061,0.6754,0.74015,0.72091,0.72886,0.73438,0.7892,0.76725,0.6583,0.71484,0.75779,0.67435,0.72075,0.72121,0.76909]},"vec2":[-0.2804,-0.2508],"answer_no_rag":"Заявление на отпуск нужно подать за 2 недели до начала отпуска, если это не противоречит внутреннему регламенту организации.","answer_rag":"Не позднее чем за 14 календарных дней до начала отпуска [1].","prompt":"Фрагменты:\n\n[1] (источник: 02_vacation.md, раздел «Заявление»)\n## Заявление\n\nЗаявление на отпуск подаётся через HR-портал не позднее чем за 14 календарных дней\nдо начала отпуска. Руководитель обязан рассмотреть заявление в течение 3 рабочих дней.\nЕсли руководитель не ответил в этот срок, заявление считается согласованным автоматически.\n\n[2] (источник: 02_vacation.md, раздел «Перенос и компенсация»)\n## Перенос и компенсация\n\nНеиспользованные дни отпуска переносятся на следующий год, но не более 10 дней.\nДенежная компенсация за неиспользованный отпуск возможна только при увольнении.\nПеренос более 10 дней допускается только с письменного разрешения директора\nпо персоналу.\n\n[3] (источник: 02_vacation.md, раздел «Дробление отпуска»)\n## Дробление отпуска\n\nОтпуск можно дробить. Одна из частей должна быть не менее 14 календарных дней.\nОстальные части — любыми отрезками от 1 дня по согласованию с руководителем.\n\n[4] (источник: 02_vacation.md, раздел «Отгулы»)\n## Отгулы\n\nОтгул за работу в выходные предоставляется в двойном размере: два отгула за один\nотработанный выходной день. Отгулы нужно использовать в течение 6 месяцев.\n\n---\n\nВопрос: За сколько дней нужно подать заявление на отпуск?"},{"q":"Сколько суточных при командировке по России?","needle":"3000 рублей","correct_chunk":19,"scores":{"bge-m3":[0.24819,0.39668,0.42459,0.40352,0.32729,0.31781,0.51849,0.42516,0.45617,0.48351,0.40952,0.51515,0.21268,0.27548,0.35944,0.28688,0.42005,0.31875,0.43166,0.79902,0.65661,0.51251,0.55525,0.55539,0.22086,0.27883,0.38176,0.28493,0.43398,0.59122,0.2063,0.30826,0.29704,0.24178,0.28996,0.39249,0.35261],"nomic-embed-text":[0.68625,0.76529,0.76058,0.76949,0.74345,0.66058,0.72862,0.74556,0.71359,0.73239,0.75623,0.71435,0.60836,0.67411,0.67995,0.65598,0.71998,0.68434,0.75948,0.83192,0.76671,0.76542,0.78292,0.7771,0.73613,0.747,0.73039,0.74695,0.76209,0.76173,0.64151,0.73872,0.72351,0.69041,0.67689,0.70357,0.72172]},"vec2":[-0.3598,-0.1215],"answer_no_rag":"Суточные при командировке по России составляют 700 рублей с человека на день.","answer_rag":"3000 рублей в сутки [1]","prompt":"Фрагменты:\n\n[1] (источник: 04_expenses.md, раздел «Суточные»)\n## Суточные\n\nСуточные при командировке по России составляют 3000 рублей в сутки.\nПри зарубежной командировке — 80 евро в сутки. Суточные выплачиваются\nавансом вместе с командировочным авансом.\n\n[2] (источник: 04_expenses.md, раздел «Лимиты на проживание»)\n## Лимиты на проживание\n\nЛимит на гостиницу в Москве и Санкт-Петербурге — 12 000 рублей в сутки.\nВ других городах России — 7 000 рублей в сутки. Превышение лимита возможно\nтолько с предварительного письменного согласования руководителя.\n\n[3] (источник: 05_engineering.md, раздел «Дежурства»)\n## Дежурства\n\nДежурство длится одну неделю и начинается в понедельник в 10:00. Дежурный обязан\nреагировать на критичные алерты в течение 15 минут. За дежурную неделю выплачивается\nнадбавка 15 000 рублей.\n\n[4] (источник: 04_expenses.md, раздел «Обучение и конференции»)\n## Обучение и конференции\n\nОплата конференций и курсов согласуется с руководителем. Бюджет на обучение —\n60 000 рублей на сотрудника в год. Неиспользованный бюджет не переносится\nна следующий год и не обменивается на деньги.\n\n---\n\nВопрос: Сколько суточных при командировке по России?"},{"q":"В какие дни недели происходит деплой?","needle":"вторникам и четвергам","correct_chunk":28,"scores":{"bge-m3":[0.2933,0.41563,0.43066,0.36771,0.39271,0.33501,0.38269,0.42449,0.46427,0.44674,0.36862,0.48649,0.22377,0.29381,0.31617,0.24724,0.40697,0.31569,0.24214,0.3016,0.32322,0.29938,0.40699,0.3239,0.43086,0.29431,0.39698,0.36857,0.70601,0.51917,0.20833,0.2826,0.33466,0.29957,0.29261,0.35672,0.41466],"nomic-embed-text":[0.70413,0.75322,0.73578,0.76717,0.74399,0.68508,0.72691,0.7427,0.71244,0.74155,0.73502,0.74394,0.6588,0.68636,0.69093,0.67674,0.73536,0.71159,0.6674,0.69724,0.67513,0.73535,0.73486,0.69423,0.76708,0.73101,0.72639,0.74095,0.80749,0.767,0.63704,0.72896,0.74605,0.65087,0.68562,0.68284,0.70542]},"vec2":[-0.1015,-0.1917],"answer_no_rag":"Это зависит от конкретного проекта или компании. Обычно деплой проводится в определенные дни и временные窗口无法继续处理此输入，请稍后再试或尝试其他输入。","answer_rag":"Деплой в продуктивную среду происходит по вторникам и четвергам [1].","prompt":"Фрагменты:\n\n[1] (источник: 05_engineering.md, раздел «Деплой»)\n## Деплой\n\nДеплой в продуктивную среду происходит по вторникам и четвергам, с 11:00 до 16:00\nпо московскому времени. В пятницу деплой запрещён. Исключение — хотфиксы, которые\nсогласует дежурный тимлид.\n\nДеплой идёт поэтапно: сначала на 5% трафика, затем на 25%, затем на 100%.\nМежду этапами выдерживается 15 минут наблюдения за метриками. Откат (rollback)\nвыполняется одной командой и занимает около 2 минут.\n\n[2] (источник: 05_engineering.md, раздел «Дежурства»)\n## Дежурства\n\nДежурство длится одну неделю и начинается в понедельник в 10:00. Дежурный обязан\nреагировать на критичные алерты в течение 15 минут. За дежурную неделю выплачивается\nнадбавка 15 000 рублей.\n\n[3] (источник: 02_vacation.md, раздел «Отгулы»)\n## Отгулы\n\nОтгул за работу в выходные предоставляется в двойном размере: два отгула за один\nотработанный выходной день. Отгулы нужно использовать в течение 6 месяцев.\n\n[4] (источник: 02_vacation.md, раздел «Дробление отпуска»)\n## Дробление отпуска\n\nОтпуск можно дробить. Одна из частей должна быть не менее 14 календарных дней.\nОстальные части — любыми отрезками от 1 дня по согласованию с руководителем.\n\n---\n\nВопрос: В какие дни недели происходит деплой?"},{"q":"Что делать при утере ноутбука?","needle":"удалённо заблокировано","correct_chunk":36,"scores":{"bge-m3":[0.25246,0.38535,0.49088,0.39393,0.3553,0.31051,0.30229,0.37956,0.36381,0.43164,0.39763,0.36358,0.26306,0.38914,0.38211,0.35408,0.37731,0.42461,0.29732,0.26383,0.23466,0.37581,0.44757,0.32932,0.30747,0.32921,0.3293,0.35461,0.37305,0.4255,0.28157,0.31791,0.39411,0.53869,0.39694,0.47657,0.70187],"nomic-embed-text":[0.67975,0.73463,0.73839,0.74402,0.73213,0.72104,0.74166,0.77077,0.7684,0.74448,0.7487,0.74516,0.67121,0.68414,0.71638,0.70936,0.68675,0.7085,0.58475,0.66419,0.64391,0.6798,0.70834,0.66663,0.70289,0.69762,0.73049,0.71595,0.75028,0.75139,0.63149,0.6926,0.70895,0.67274,0.62829,0.69352,0.79537]},"vec2":[0.067,-0.1243],"answer_no_rag":"Срочно:\n\n1. Свяжитесь с оператором мобильной связи и попросите заблокировать SIM-карту.\n2. Измените пароли и важные данные.\n3. Сообщите в службу поддержки ноутбука для блокировки доступа.\n4. Обратитесь в полицию с заявлением.\n5. Уведомите банковские учреждения о возможной угрозе безопасности.","answer_rag":"Немедленно сообщить об утере ноутбука, устройство будет удалённо заблокировано, а учётные данные отозваны. Замена устройства производится в течение 2 рабочих дней. [1]","prompt":"Фрагменты:\n\n[1] (источник: 06_security.md, раздел «Утеря устройств»)\n## Утеря устройств\n\nОб утере ноутбука или телефона нужно сообщить немедленно, в любое время суток.\nУстройство будет удалённо заблокировано, а учётные данные отозваны. Замена\nустройства производится в течение 2 рабочих дней.\n\n[2] (источник: 06_security.md, раздел «Шифрование устройств»)\n## Шифрование устройств\n\nВсе ноутбуки шифруются с помощью FileVault. Проверить статус шифрования можно\nв разделе «Безопасность» системных настроек. Использование личных устройств\nдля работы с внутренними системами запрещено.\n\n[3] (источник: 01_onboarding.md, раздел «Первый день»)\n## Первый день\n\nВ 10:00 по московскому времени новый сотрудник встречается с наставником. Наставник\nзакрепляется за сотрудником на весь испытательный срок, который в компании составляет\n3 месяца. За каждым новым сотрудником также закрепляется «buddy» — коллега из другой\nкоманды, с которым можно обсуждать любые вопросы без формальностей.\n\nВ первый день выдаётся ноутбук MacBook Pro 14\" и пропуск в офис. Пропуск активируется\nв течение 2 часов после выдачи.\n\n[4] (источник: 06_security.md, раздел «Инциденты»)\n## Инциденты\n\nОб инциденте безопасности нужно сообщить в течение 1 часа с момента обнаружения.\nСлужба безопасности отвечает на сообщение об инциденте в течение 30 минут\nкруглосуточно. Утечка строго конфиденциальных данных классифицируется как инцидент\nпервого уровня и требует немедленного уведомления директора по безопасности.\n\n---\n\nВопрос: Что делать при утере ноутбука?"},{"q":"А если я отработал четыре года?","needle":"ещё 4 календарных","correct_chunk":6,"scores":{"bge-m3":[0.27571,0.3988,0.45407,0.41918,0.35879,0.34319,0.51235,0.41748,0.48953,0.49492,0.37215,0.50916,0.2356,0.31119,0.36842,0.33238,0.417,0.35611,0.27046,0.362,0.3151,0.34105,0.45214,0.40854,0.33615,0.30353,0.45036,0.35702,0.3965,0.43463,0.22937,0.36525,0.31589,0.2548,0.27701,0.37996,0.40177],"nomic-embed-text":[0.63589,0.70696,0.68502,0.68372,0.67936,0.62638,0.70349,0.73055,0.68668,0.66748,0.70236,0.71162,0.59542,0.63709,0.65689,0.66734,0.65938,0.68267,0.58675,0.63512,0.6222,0.6796,0.6609,0.62741,0.67161,0.68315,0.69519,0.68715,0.69676,0.67846,0.58191,0.62736,0.68163,0.63404,0.62776,0.63288,0.67042]},"vec2":[-0.1269,-0.1726],"answer_no_rag":"Вы отработали четыре года. Чем еще могу помочь?","answer_rag":"Дополнительно к базовому ежегодному оплачиваемому отпуску вы не получите, так как максимальная длительность отпуска составляет 32 календарных дня [1].","prompt":"Фрагменты:\n\n[1] (источник: 02_vacation.md, раздел «Ежегодный оплачиваемый отпуск»)\n## Ежегодный оплачиваемый отпуск\n\nБазовый ежегодный оплачиваемый отпуск в компании «Вектор» составляет 28 календарных дней.\nДополнительно сотрудникам, проработавшим более 3 лет, предоставляется ещё 4 календарных дня.\nИтого максимальная длительность — 32 календарных дня в год.\n\n[2] (источник: 02_vacation.md, раздел «Отгулы»)\n## Отгулы\n\nОтгул за работу в выходные предоставляется в двойном размере: два отгула за один\nотработанный выходной день. Отгулы нужно использовать в течение 6 месяцев.\n\n[3] (источник: 02_vacation.md, раздел «Перенос и компенсация»)\n## Перенос и компенсация\n\nНеиспользованные дни отпуска переносятся на следующий год, но не более 10 дней.\nДенежная компенсация за неиспользованный отпуск возможна только при увольнении.\nПеренос более 10 дней допускается только с письменного разрешения директора\nпо персоналу.\n\n[4] (источник: 02_vacation.md, раздел «Дробление отпуска»)\n## Дробление отпуска\n\nОтпуск можно дробить. Одна из частей должна быть не менее 14 календарных дней.\nОстальные части — любыми отрезками от 1 дня по согласованию с руководителем.\n\n---\n\nВопрос: А если я отработал четыре года?"},{"q":"Какая погода завтра в Москве?","needle":null,"correct_chunk":null,"scores":{"bge-m3":[0.28721,0.32946,0.41609,0.32675,0.33421,0.25518,0.28239,0.29778,0.28628,0.30609,0.26787,0.28945,0.23499,0.25679,0.28882,0.28488,0.30707,0.28804,0.20589,0.3709,0.39571,0.29236,0.30381,0.26432,0.26535,0.29832,0.3201,0.33385,0.46912,0.37733,0.24671,0.2959,0.25791,0.23946,0.27136,0.32465,0.30683],"nomic-embed-text":[0.6243,0.70131,0.71398,0.69155,0.67686,0.63039,0.71065,0.71939,0.68688,0.67214,0.70632,0.70863,0.57328,0.60991,0.65065,0.63463,0.67097,0.63365,0.62176,0.68331,0.65876,0.67765,0.69575,0.62836,0.70246,0.70207,0.72058,0.70408,0.73737,0.69661,0.57448,0.65083,0.67404,0.606,0.62943,0.6392,0.6759]},"vec2":[-0.0147,-0.1017],"answer_no_rag":"Извините, но я не могу предоставить точную погоду на завтра, так как не имею доступа к реальному времени и прогнозам погоды. Вы можете проверить актуальный прогноз погоды на завтра на специализированных сайтах или приложениях.","answer_rag":"В документах нет ответа на этот вопрос.","prompt":"Фрагменты:\n\n[1] (источник: 05_engineering.md, раздел «Деплой»)\n## Деплой\n\nДеплой в продуктивную среду происходит по вторникам и четвергам, с 11:00 до 16:00\nпо московскому времени. В пятницу деплой запрещён. Исключение — хотфиксы, которые\nсогласует дежурный тимлид.\n\nДеплой идёт поэтапно: сначала на 5% трафика, затем на 25%, затем на 100%.\nМежду этапами выдерживается 15 минут наблюдения за метриками. Откат (rollback)\nвыполняется одной командой и занимает около 2 минут.\n\n[2] (источник: 01_onboarding.md, раздел «Первый день»)\n## Первый день\n\nВ 10:00 по московскому времени новый сотрудник встречается с наставником. Наставник\nзакрепляется за сотрудником на весь испытательный срок, который в компании составляет\n3 месяца. За каждым новым сотрудником также закрепляется «buddy» — коллега из другой\nкоманды, с которым можно обсуждать любые вопросы без формальностей.\n\nВ первый день выдаётся ноутбук MacBook Pro 14\" и пропуск в офис. Пропуск активируется\nв течение 2 часов после выдачи.\n\n[3] (источник: 04_expenses.md, раздел «Лимиты на проживание»)\n## Лимиты на проживание\n\nЛимит на гостиницу в Москве и Санкт-Петербурге — 12 000 рублей в сутки.\nВ других городах России — 7 000 рублей в сутки. Превышение лимита возможно\nтолько с предварительного письменного согласования руководителя.\n\n[4] (источник: 05_engineering.md, раздел «Дежурства»)\n## Дежурства\n\nДежурство длится одну неделю и начинается в понедельник в 10:00. Дежурный обязан\nреагировать на критичные алерты в течение 15 минут. За дежурную неделю выплачивается\nнадбавка 15 000 рублей.\n\n---\n\nВопрос: Какая погода завтра в Москве?"}],"eval":{"bge-m3":{"recall":1.0,"mrr":1.0,"misses":[],"total":14,"k":5},"nomic-embed-text":{"recall":0.7143,"mrr":0.6071,"misses":["Сколько дней отпуска положено сотруднику?","Сколько денег в год выделяется на обучение?","Как часто нужно менять пароль?","Какой испытательный срок в компании?"],"total":14,"k":5}}};
+
+/* ── палитра документов ── */
+const COLORS = ["#38bdf8","#34d399","#fbbf24","#f472b6","#a78bfa","#fb7185"];
+const docColor = src => COLORS[DATA.documents.findIndex(d => d.source === src) % COLORS.length];
+const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ── состояние ── */
+const state = { qi: 0, model: "bge-m3", k: DATA.meta.top_k, hidden: new Set() };
+
+/* ══════════ шапка: метрики ══════════ */
+document.getElementById("m-docs").textContent   = DATA.meta.docs_total + " документа";
+document.getElementById("m-chunks").textContent = DATA.meta.chunks_total + " чанков";
+document.getElementById("m-dim").textContent    = DATA.models["bge-m3"].dim + " измерения";
+document.getElementById("m-cs").textContent     = DATA.meta.chunk_size + " символов / overlap " + DATA.meta.chunk_overlap;
+document.getElementById("m-k").textContent      = "k = " + DATA.meta.top_k;
+document.getElementById("m-llm").textContent    = DATA.meta.llm;
+document.getElementById("dimtext").textContent  = DATA.models["bge-m3"].dim;
+document.getElementById("mapcount").textContent = DATA.meta.chunks_total;
+document.getElementById("pcaexp").textContent   = (DATA.meta.pca_explained * 100).toFixed(1) + "%";
+document.getElementById("llmname").textContent  = DATA.meta.llm;
+document.getElementById("evaltotal").textContent = DATA.eval["bge-m3"].total;
+document.querySelectorAll(".ek").forEach(e => e.textContent = DATA.eval["bge-m3"].k);
+
+/* ══════════ 01 · корпус ══════════ */
+const doclist = document.getElementById("doclist");
+DATA.documents.forEach(d => {
+  const c = document.createElement("div");
+  c.className = "card";
+  c.style.cursor = "pointer";
+  c.style.borderLeft = "3px solid " + docColor(d.source);
+  c.innerHTML = `<h3>${esc(d.title)}</h3>
+    <div class="meta">${esc(d.source)} · ${d.chars.toLocaleString("ru")} символов</div>`;
+  c.onclick = () => showDoc(d.source);
+  doclist.appendChild(c);
+});
+function showDoc(src){
+  const d = DATA.documents.find(x => x.source === src);
+  document.getElementById("docview").innerHTML =
+    `<div class="card"><h3 style="margin-bottom:10px">${esc(d.title)}
+      <span class="meta" style="font-weight:400"> · ${esc(d.source)}</span></h3>
+     <pre style="max-height:340px">${esc(d.text)}</pre></div>`;
+  document.getElementById("docview").scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+showDoc(DATA.documents[1].source);
+
+/* ══════════ 02 · чанкинг (тот же алгоритм, что в Python) ══════════ */
+const csize = document.getElementById("csize"), covl = document.getElementById("covl"),
+      cdoc = document.getElementById("cdoc");
+csize.value = DATA.meta.chunk_size; covl.value = DATA.meta.chunk_overlap;
+DATA.documents.forEach((d, i) => {
+  const o = document.createElement("option");
+  o.value = d.source; o.textContent = d.source; cdoc.appendChild(o);
+});
+cdoc.value = DATA.documents[1].source;
+
+function splitIntoChunks(text, title, size, overlap){
+  const out = [];
+  for (let section of text.split(/\n(?=##\s)/)){
+    section = section.trim();
+    if (!section) continue;
+    const m = section.match(/^##\s+(.+)$/m);
+    const heading = m ? m[1].trim() : title;
+    const paras = section.split("\n\n").map(p => p.trim()).filter(Boolean);
+    let buf = "";
+    for (const p of paras){
+      if (buf && buf.length + p.length + 2 > size){
+        out.push({text: buf, heading});
+        buf = buf.slice(-overlap) + "\n\n" + p;
+      } else {
+        buf = buf ? buf + "\n\n" + p : p;
+      }
+    }
+    if (buf.trim()) out.push({text: buf.trim(), heading});
+  }
+  return out;
+}
+function overlapLen(a, b){
+  const max = Math.min(a.length, b.length, 600);
+  for (let n = max; n > 25; n--) if (a.slice(-n) === b.slice(0, n)) return n;
+  return 0;
+}
+function renderChunking(){
+  const size = +csize.value, ovl = +covl.value;
+  document.getElementById("csizev").textContent = size;
+  document.getElementById("covlv").textContent = ovl;
+  const doc = DATA.documents.find(d => d.source === cdoc.value);
+  const chunks = splitIntoChunks(doc.text, doc.title, size, ovl);
+  document.getElementById("cstat").textContent = chunks.length + " чанков";
+
+  const box = document.getElementById("chunks");
+  box.innerHTML = "";
+  let overlaps = 0;
+  chunks.forEach((c, i) => {
+    const color = docColor(doc.source);
+    // перекрытие с предыдущим чанком (начало) и со следующим (конец)
+    const n1 = i > 0 ? overlapLen(chunks[i-1].text, c.text) : 0;
+    const n2 = i < chunks.length - 1 ? overlapLen(c.text, chunks[i+1].text) : 0;
+    const head = n1 >= 25 ? n1 : 0;
+    const tail = n2 >= 25 ? n2 : 0;
+    if (head) overlaps++;
+    const body =
+        (head ? `<mark>${esc(c.text.slice(0, head))}</mark>` : "")
+      + esc(c.text.slice(head, c.text.length - tail))
+      + (tail ? `<mark>${esc(c.text.slice(c.text.length - tail))}</mark>` : "");
+
+    const el = document.createElement("div");
+    el.className = "chunk";
+    el.style.setProperty("--c", color);
+    el.innerHTML = `<div class="ch-h"><span class="tag">#${i+1} · ${esc(c.heading)}</span>
+      <span>${c.text.length} символов</span></div><div class="ch-t">${body}</div>`;
+    box.appendChild(el);
+  });
+  document.getElementById("ovnote").innerHTML = overlaps
+    ? `Перекрытий между соседними чанками: <b>${overlaps}</b>. Это и есть overlap — он не даёт разрезать мысль пополам.`
+    : `При CHUNK_OVERLAP = 0 перекрытий нет: каждый чанк независим, и мысль на границе может разорваться.`;
+}
+[csize, covl, cdoc].forEach(el => el.addEventListener("input", renderChunking));
+renderChunking();
+
+/* ══════════ 03 · вектор и карта ══════════ */
+function renderVector(chunkIdx){
+  const c = DATA.chunks[chunkIdx];
+  document.getElementById("vechead").innerHTML =
+    `Вектор чанка #${chunkIdx} — <span class="meta">${esc(c.source)} › ${esc(c.heading)}</span>`;
+  const strip = document.getElementById("vecstrip");
+  strip.innerHTML = "";
+  c.vec_head.forEach((v, i) => {
+    const d = document.createElement("div");
+    d.className = "vc";
+    // нижний порог яркости, иначе малые значения сливаются с фоном
+    const a = Math.min(0.22 + Math.abs(v) * 3.2, 1);
+    d.style.background = v >= 0 ? `rgba(34,211,238,${a})` : `rgba(244,114,182,${a})`;
+    d.title = `измерение ${i}: ${v}`;
+    strip.appendChild(d);
+  });
+}
+
+function renderMap(){
+  const svg = document.getElementById("map");
+  const pts = DATA.chunks.filter(c => !state.hidden.has(c.source));
+  if (!pts.length){ svg.innerHTML = ""; return; }
+
+  const W = 800, H = 460, PAD = 46;
+  const xs = pts.map(p => p.vec2[0]), ys = pts.map(p => p.vec2[1]);
+  const q  = DATA.queries[state.qi];
+  xs.push(q.vec2[0]); ys.push(q.vec2[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const sx = v => PAD + (v - x0) / ((x1 - x0) || 1) * (W - 2*PAD);
+  const sy = v => H - PAD - (v - y0) / ((y1 - y0) || 1) * (H - 2*PAD);
+
+  const scores = q.scores[state.model];
+  const order = scores.map((s, i) => [s, i]).sort((a, b) => b[0] - a[0]);
+  const topk = new Set(order.slice(0, state.k).map(([, i]) => i));
+  const smin = Math.min(...scores), smax = Math.max(...scores);
+
+  let html = `<defs>
+    <radialGradient id="qglow"><stop offset="0%" stop-color="#22d3ee" stop-opacity=".5"/>
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/></radialGradient></defs>`;
+  html += `<rect width="${W}" height="${H}" fill="none"/>
+    <line x1="${PAD}" y1="${H-PAD}" x2="${W-PAD}" y2="${H-PAD}" stroke="#1e2a3a"/>
+    <line x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${H-PAD}" stroke="#1e2a3a"/>
+    <text x="${W-PAD}" y="${H-PAD+22}" fill="#5d6d82" font-size="11" text-anchor="end"
+      font-family="monospace">главная компонента 1 →</text>
+    <text x="14" y="${PAD-16}" fill="#5d6d82" font-size="11" font-family="monospace">↑ компонента 2</text>`;
+
+  // линии от вопроса к top-k
+  pts.forEach(c => {
+    if (!topk.has(c.i)) return;
+    html += `<line x1="${sx(q.vec2[0])}" y1="${sy(q.vec2[1])}" x2="${sx(c.vec2[0])}" y2="${sy(c.vec2[1])}"
+      stroke="#22d3ee" stroke-opacity=".28" stroke-width="1.2" stroke-dasharray="4 4"/>`;
+  });
+
+  // точки чанков
+  pts.forEach(c => {
+    const isTop = topk.has(c.i);
+    const norm = (scores[c.i] - smin) / ((smax - smin) || 1);
+    const col = docColor(c.source);
+    const X = sx(c.vec2[0]), Y = sy(c.vec2[1]);
+    const r = isTop ? 8 : 5.5;
+    html += `<circle cx="${X}" cy="${Y}" r="${isTop ? r + 9 : r + 6}" fill="${col}"
+        opacity="${isTop ? 0.14 : 0.05 + norm * 0.06}"/>`;
+    html += `<circle cx="${X}" cy="${Y}" r="${r}" fill="${col}"
+        stroke="${isTop ? "#e6edf6" : "none"}" stroke-width="${isTop ? 1.6 : 0}"
+        opacity="${isTop ? 1 : 0.5}"><title>${esc(c.source)} › ${esc(c.heading)} — cos=${scores[c.i].toFixed(3)}</title></circle>`;
+    if (isTop) html += `<text x="${X + 13}" y="${Y + 4}" fill="#e6edf6" font-size="11"
+        font-family="monospace">${c.i}</text>`;
+  });
+
+  // точка вопроса
+  const QX = sx(q.vec2[0]), QY = sy(q.vec2[1]);
+  html += `<circle cx="${QX}" cy="${QY}" r="34" fill="url(#qglow)"/>
+    <path d="M ${QX} ${QY-11} L ${QX+11} ${QY} L ${QX} ${QY+11} L ${QX-11} ${QY} Z"
+      fill="#22d3ee" stroke="#04222a" stroke-width="1.5"><title>вектор вопроса</title></path>
+    <text x="${QX + 17}" y="${QY + 4}" fill="#22d3ee" font-size="11.5"
+      font-family="monospace">вопрос</text>`;
+
+  svg.innerHTML = html;
+}
+
+function renderLegend(){
+  const el = document.getElementById("legend");
+  el.innerHTML = "";
+  DATA.documents.forEach(d => {
+    const n = DATA.chunks.filter(c => c.source === d.source).length;
+    const item = document.createElement("div");
+    item.className = "lg" + (state.hidden.has(d.source) ? " off" : "");
+    item.innerHTML = `<span class="dot" style="background:${docColor(d.source)}"></span>
+      ${esc(d.source)} <span style="color:var(--dimmer)">(${n})</span>`;
+    item.onclick = () => {
+      state.hidden.has(d.source) ? state.hidden.delete(d.source) : state.hidden.add(d.source);
+      renderLegend(); renderMap();
+    };
+    el.appendChild(item);
+  });
+}
+
+/* ══════════ 04 · поиск ══════════ */
+const qbar = document.getElementById("qbar");
+DATA.queries.forEach((q, i) => {
+  const b = document.createElement("button");
+  b.className = "qbtn" + (i === state.qi ? " on" : "");
+  b.textContent = q.q;
+  b.onclick = () => { state.qi = i; renderAll(); };
+  qbar.appendChild(b);
+});
+
+const modelseg = document.getElementById("modelseg");
+Object.keys(DATA.models).forEach(name => {
+  const b = document.createElement("button");
+  b.textContent = name;
+  b.className = name === state.model ? "on" : "";
+  b.dataset.m = name;
+  b.onclick = () => { state.model = name; renderAll(); };
+  modelseg.appendChild(b);
+});
+const kslider = document.getElementById("kslider");
+kslider.value = state.k;
+kslider.oninput = () => { state.k = +kslider.value; renderSearch(); renderMap(); };
+
+function renderSearch(){
+  const q = DATA.queries[state.qi];
+  const scores = q.scores[state.model];
+  const order = scores.map((s, i) => [s, i]).sort((a, b) => b[0] - a[0]);
+  const rankOf = i => order.findIndex(([, j]) => j === i) + 1;
+
+  document.querySelectorAll(".qbtn").forEach((b, i) => b.classList.toggle("on", i === state.qi));
+  document.querySelectorAll("#modelseg button").forEach(b =>
+    b.classList.toggle("on", b.dataset.m === state.model));
+  document.getElementById("kv").textContent = state.k;
+
+  // вердикт
+  const v = document.getElementById("verdict");
+  const correct = q.correct_chunk;
+  const gap = order[0][0] - order[1][0];
+  if (correct === null){
+    v.className = "verdict ok";
+    v.innerHTML = `В корпусе <b>нет ответа</b> на этот вопрос. Правильное поведение системы —
+      честно отказаться, а не выдумывать. Проверьте блок «06 Ответ»: так оно и происходит.`;
+  } else {
+    const r = rankOf(correct);
+    const ok = r <= state.k;
+    v.className = "verdict " + (ok ? "ok" : "err");
+    v.innerHTML = ok
+      ? `Правильный чанк <b>#${correct}</b> найден — место <b>${r}</b> из ${scores.length},
+         он попадает в контекст. Разрыв top-1 и top-2: <b>${gap.toFixed(4)}</b>.`
+      : `Правильный чанк <b>#${correct}</b> оказался на <b>${r}</b> месте — при k=${state.k}
+         он <b>НЕ попадёт</b> в промпт, и модель физически не сможет ответить. Разрыв
+         top-1 и top-2: <b>${gap.toFixed(4)}</b>.`;
+  }
+
+  // список
+  const rank = document.getElementById("rank");
+  rank.innerHTML = "";
+  const smin = Math.min(...scores), smax = Math.max(...scores);
+  order.slice(0, 12).forEach(([s, i], pos) => {
+    const c = DATA.chunks[i];
+    const isCorrect = i === correct;
+    const el = document.createElement("div");
+    el.className = "row" + (isCorrect ? " hit" : "");
+    el.style.opacity = pos < state.k ? 1 : 0.55;
+    const w = 8 + (s - smin) / ((smax - smin) || 1) * 92;
+    el.innerHTML = `<div class="rk">${pos + 1}</div>
+      <div>
+        <div class="rh">
+          <span class="rt">${esc(c.heading)}${isCorrect ? " ← правильный" : ""}</span>
+          <span class="rs">${s.toFixed(4)}</span>
+        </div>
+        <div class="bar"><i style="width:${w}%"></i></div>
+        <div class="src" style="margin-top:5px">#${i} · ${esc(c.source)} · ${c.chars} симв.</div>
+      </div>`;
+    rank.appendChild(el);
+  });
+
+  const out = document.getElementById("outside");
+  if (correct !== null){
+    const r = rankOf(correct);
+    out.textContent = r <= 12
+      ? `Правильный чанк виден в списке выше (место ${r}).`
+      : `Правильный чанк #${correct} не попал даже в top-12 — его место ${r} из ${scores.length}.`;
+    out.style.color = r <= state.k ? "var(--good)" : "var(--warn)";
+  } else {
+    out.textContent = "";
+  }
+}
+
+/* ══════════ 05 · промпт ══════════ */
+function renderPrompt(){
+  const q = DATA.queries[state.qi];
+  // Промпт в данных собран для k=DATA.meta.top_k и модели bge-m3 — помечаем это явно
+  const same = state.model === "bge-m3" && state.k === DATA.meta.top_k;
+  document.getElementById("pk").textContent = "k=" + DATA.meta.top_k;
+  const box = document.getElementById("promptbox");
+  let html = esc(q.prompt);
+  html = html.replace(/\[(\d+)\]/g, '<span class="c1">[$1]</span>');
+  html = html.replace(/(Правила:|Фрагменты:|Вопрос:)/g, '<span class="c2">$1</span>');
+  box.innerHTML = html;
+  if (!same){
+    document.getElementById("promptnote")?.remove();
+    box.insertAdjacentHTML("afterend",
+      `<p class="overlapnote" id="promptnote" style="color:var(--warn)">
+        Показан промпт для bge-m3 при k=${DATA.meta.top_k}. Сейчас выбрано
+        ${state.model}, k=${state.k} — набор фрагментов был бы другим.</p>`);
+  } else {
+    document.getElementById("promptnote")?.remove();
+  }
+}
+
+/* ══════════ 06 · ответы ══════════ */
+function renderAnswers(){
+  const q = DATA.queries[state.qi];
+  document.getElementById("ansno").textContent = q.answer_no_rag;
+  const yes = document.getElementById("ansyes");
+  yes.innerHTML = esc(q.answer_rag).replace(/\[(\d+)\]/g, '<span class="cite">[$1]</span>');
+  document.getElementById("ansnote").innerHTML = q.correct_chunk === null
+    ? `<b>Смотрите:</b> без RAG модель уверенно отвечает на вопрос, ответа на который в базе знаний нет.
+       С RAG она отказывается — потому что в промпте есть явное разрешение отказаться.`
+    : `Ссылки <span class="cite">[1]</span>, <span class="cite">[2]</span> в ответе — это номера
+       фрагментов из промпта выше. Они и делают ответ проверяемым.`;
+}
+
+/* ══════════ 07 · оценка ══════════ */
+function renderEval(){
+  const t = document.getElementById("evaltable");
+  const names = Object.keys(DATA.eval);
+  const best = n => names.every(m => DATA.eval[m].recall <= DATA.eval[n].recall);
+  t.innerHTML = `<tr><th>Модель эмбеддингов</th><th>Recall@${DATA.eval[names[0]].k}</th><th>MRR</th><th>Провалено</th></tr>`
+    + names.map(n => {
+        const e = DATA.eval[n];
+        const win = best(n) && names.length > 1;
+        return `<tr>
+          <td><b>${esc(n)}</b><br><span class="meta">${esc(DATA.models[n].note)} · ${DATA.models[n].dim}d</span></td>
+          <td class="num ${win ? "win" : "lose"}">${(e.recall * 100).toFixed(0)}%</td>
+          <td class="num ${win ? "win" : "lose"}">${e.mrr.toFixed(3)}</td>
+          <td class="num">${e.misses.length} из ${e.total}</td></tr>`;
+      }).join("");
+
+  const boxes = document.getElementById("missboxes");
+  boxes.innerHTML = "";
+  names.forEach(n => {
+    const e = DATA.eval[n];
+    const d = document.createElement("div");
+    d.className = "card";
+    d.innerHTML = `<h3 style="color:${e.misses.length ? "var(--bad)" : "var(--good)"}">
+      ${esc(n)}: ${e.misses.length ? "не найдено " + e.misses.length : "все вопросы найдены"}</h3>`
+      + (e.misses.length
+          ? `<ul class="misslist">${e.misses.map(m => `<li>${esc(m)}</li>`).join("")}</ul>`
+          : `<div class="meta" style="margin-top:8px">Правильный чанк всегда оказывался первым.</div>`);
+    boxes.appendChild(d);
+  });
+}
+
+/* ══════════ общий рендер ══════════ */
+function topChunkIndex(){
+  const scores = DATA.queries[state.qi].scores[state.model];
+  return scores.map((s, i) => [s, i]).sort((a, b) => b[0] - a[0])[0][1];
+}
+function renderAll(){
+  renderSearch(); renderPrompt(); renderAnswers(); renderMap();
+  renderVector(topChunkIndex());
+}
+renderLegend();
+renderAll();
+renderEval();
+
+/* ══════════ подсветка навигации ══════════ */
+const links = [...document.querySelectorAll("nav a")];
+const secs = links.map(a => document.querySelector(a.getAttribute("href")));
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (!e.isIntersecting) return;
+    links.forEach((l, i) => l.classList.toggle("on", secs[i] === e.target));
+  });
+}, {rootMargin:"-45% 0px -50% 0px"});
+secs.forEach(s => s && obs.observe(s));
+</script>
+</body>
+</html>
